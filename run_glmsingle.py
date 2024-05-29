@@ -18,9 +18,10 @@ def run_glmsingle(subject, session):
     output_dir = DIR_OUTPUT / \
         f'sub-{subject.zfill(3)}' / f'ses-{session}' / 'GLMsingle'
     os.makedirs(output_dir, exist_ok=True)
+    params = {'wantlibrary': 1, 'wantglmdenoise': 1, 'wantfracridge': 1, 'wantfileoutputs': [
+        1, 1, 1, 1]}
     for design_matrices_type in (design_matrices_aot, design_matrices_control):
-        glm = GLM_single(wantlibrary=1, wantglmdenoise=1,
-                         wantfracridge=1, wantfileoutputs=[1, 1, 1, 1])
+        glm = GLM_single(params)
         glm.fit(design=design_matrices_type, data=bold_data, stimdur=2.5,
                 tr=0.9, outputdir=str(output_dir), figuredir=str(output_dir))
 
