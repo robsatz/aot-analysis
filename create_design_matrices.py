@@ -4,12 +4,12 @@ from pathlib import Path
 from pprint import pprint
 import yaml
 import pandas as pd
-import aot
+import argparse
 
 
-def get_tr_sequence(run, shift=0):
+def get_tr_sequence(subject, session, run, shift=0):
     tr_sequence = yaml.load(open(
-        DIR_SETTINGS / f'experiment_settings_sub_{SUBJECT}_ses_{SESSION}_run_{run}.yml'), Loader=yaml.FullLoader)['stimuli']['movie_files']
+        DIR_SETTINGS / f'experiment_settings_sub_{subject}_ses_{session}_run_{run}.yml'), Loader=yaml.FullLoader)['stimuli']['movie_files']
 
     # extend each trial by three blank TRs; recode blanks
     tr_sequence = [
@@ -30,95 +30,94 @@ def get_tr_sequence(run, shift=0):
     return tr_sequence
 
 
-def get_video_conditions():
-    video_conditions = pd.read_csv(DIR_VIDEOS / 'video_conditions.tsv',
-                                   sep='\t', header=None, names=['video_condition', 'feature_index'])
-    video_conditions['video_condition_stripped'] = video_conditions['video_condition'].str.slice(
-        0, 4)
-    # fix label for blank trials
-    video_conditions.loc[0, 'video_condition_stripped'] = 'blank'
-    # recode to account for features
-    video_conditions['feature_index'] = [-1] + \
-        (video_conditions.loc[1:, 'video_condition_stripped'].astype(
-            int) - 1).to_list()
-    video_conditions['is_reverse'] = video_conditions['video_condition'].str.endswith(
-        '_rv.mp4').astype(int)
-    # dynamically updated; keeps track of first vs second presentation of each video
-    video_conditions['presentation_index'] = 0
+def get_feature_indices(tr_label, prior_videos):
+    """
+    Given a TR label, assigns an index for the design matrix according to video direction .
+    Assumes TR labels of the format '0001_rv.mp4'.
+    """
+    if tr_label == BLANK:
+        feature_idx_aot = feature_idx_control = BLANK
+    else:
+        video_id = int(tr_label[:4])
+        is_reverse = (tr_label[5:7] == 'rv')
+        is_repeat = (video_id in prior_videos)
+        if not is_repeat:
+            prior_videos.append(video_id)
 
-    return video_conditions
+        # -1 for zero-indexing, *2 for two conditions per video
+        feature_idx_aot = (video_id - 1) * 2 + is_reverse
+        feature_idx_control = (video_id - 1) * 2 + is_repeat
+    return feature_idx_aot, feature_idx_control, prior_videos
 
 
-def create_run_design_matrices(run, tr_sequence, video_conditions):
+def create_run_design_matrices(tr_sequence, prior_videos, subject, session, run):
     # initialize design matrix with shape: n_TRs, n_features (n_video_ids + 1 placeholder -- later filled with is_reverse or is_repeat)
-    design_matrix = np.zeros(
-        (len(tr_sequence), len(video_conditions['feature_index']) + 1), dtype=int)
-    is_reverse = np.zeros(len(tr_sequence), dtype=int)
-    is_repeat = np.zeros(len(tr_sequence), dtype=int)
+    n_features = 4359
+    design_matrix_aot = np.zeros(
+        (len(tr_sequence), n_features), dtype=int)
+    design_matrix_control = np.zeros(
+        (len(tr_sequence), n_features), dtype=int)
 
     for tr_index, tr_label in enumerate(tr_sequence):
-        if tr_label != BLANK:
-            # look up entry in video_conditions df
-            video_condition = video_conditions[video_conditions.video_condition == tr_label].squeeze(
-            )
-            # one-hot encode video condition
-            design_matrix[tr_index][video_condition['feature_index']] = 1
-            is_reverse[tr_index] = video_condition['is_reverse']
-            is_repeat[tr_index] = video_condition['presentation_index']
-            video_conditions.at[video_condition.name,
-                                'presentation_index'] += 1
+        feature_idx_aot, feature_idx_control, prior_videos = get_feature_indices(
+            tr_label, prior_videos)
+        design_matrix_aot[tr_index][feature_idx_aot] = 1
+        design_matrix_control[tr_index][feature_idx_control] = 1
 
-            assert video_conditions.at[video_condition.name,
-                                       'presentation_index'] <= 2, f'tr_label: {tr_label}, series: {video_condition}, actual: {video_conditions.at[video_condition.name, "presentation_index"]}'
-
-    # create aot and control design matrix from base design matrix -- difference in final feature
-    n_erroneous_vals = (design_matrix[:, -1] != 0).sum()
-    # ensure placeholder feature remained empty
-    assert n_erroneous_vals == 0, f'placeholder erroneously populated with {n_erroneous_vals} values'
-    design_matrix_aot = design_matrix.copy()
-    design_matrix_aot[:, -1] = is_reverse
-    design_matrix_control = design_matrix.copy()
-    design_matrix_control[:, -1] = is_repeat
+    # remove unused features from design matrices
+    used_features = np.where(np.sum(design_matrix_aot, axis=0) != 0)[0]
+    design_matrix_aot = design_matrix_aot[:, used_features]
+    design_matrix_control = design_matrix_control[:, used_features]
 
     # save design matrices
-    os.makedirs(DIR_OUTPUT, exist_ok=True)
-    np.save(DIR_OUTPUT /
-            f'sub_{SUBJECT}_ses_{SESSION}_run_{run}_design_matrix_aot.npy', design_matrix_aot)
-    np.save(DIR_OUTPUT /
-            f'sub_{SUBJECT}_ses_{SESSION}_run_{run}_design_matrix_control.npy', design_matrix_control)
+    output_path = DIR_OUTPUT / \
+        f'sub-{subject}' / f'ses-{session}' / 'design_matrices'
+    os.makedirs(output_path, exist_ok=True)
+    np.save(output_path /
+            f'sub_{subject}_ses_{session}_run_{run}_design_matrix_aot.npy', design_matrix_aot)
+    np.save(output_path /
+            f'sub_{subject}_ses_{session}_run_{run}_design_matrix_control.npy', design_matrix_control)
 
-    return design_matrix_aot, design_matrix_control, video_conditions
+    return design_matrix_aot, design_matrix_control, prior_videos
 
 
-def create_session_design_matrices(video_conditions):
+def create_session_design_matrices(subject, session):
     core_settings = yaml.load(
         open(DIR_EXPERIMENT / 'core_exp_settings.yml'), Loader=yaml.FullLoader)
+
     design_matrices_aot = []
     design_matrices_control = []
+    prior_videos = []
     for run_index in range(core_settings['various']['run_number']):
         run = str(run_index + 1).zfill(2)
-        tr_sequence = get_tr_sequence(run)
-        design_matrix_aot, design_matrix_control, video_conditions = create_run_design_matrices(run,
-                                                                                                tr_sequence, video_conditions)
+        tr_sequence = get_tr_sequence(subject, session, run)
+        design_matrix_aot, design_matrix_control, prior_videos = create_run_design_matrices(
+            tr_sequence, prior_videos, subject, session, run)
         design_matrices_aot.append(design_matrix_aot)
         design_matrices_control.append(design_matrix_control)
     return design_matrices_aot, design_matrices_control
 
 
-SUBJECT = '01'
-SESSION = '03'
+def create_subject_design_matrices(subject):
+    for session_idx in range(10):
+        session = str(session_idx + 1).zfill(2)
+        design_matrices_aot, design_matrices_control = create_session_design_matrices(
+            subject, session)
+    return design_matrices_aot, design_matrices_control
+
+
 BLANK = -1  # encoding of blank trials
 
-DIR_BASE = Path(aot.__path__[0])
+DIR_BASE = Path('arrow_of_time_experiment/aot')
 DIR_EXPERIMENT = DIR_BASE / 'experiment'
 DIR_VIDEOS = DIR_BASE / 'data/videos'
 DIR_SETTINGS = DIR_BASE / 'data/experiment/settings/main'
-DIR_OUTPUT = Path('./data')
-DIR_OUTPUT = DIR_OUTPUT / \
-    ('sub-' + SUBJECT) / \
-    ('ses-' + SESSION) / \
-    'design_matrices'
+DIR_OUTPUT = Path('./derivatives')
 
 if __name__ == '__main__':
-    video_conditions = get_video_conditions()
-    create_session_design_matrices(video_conditions)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-sub", "--subject", type=int, default=1,
+                        help="Subject number.")
+    args = parser.parse_args()
+    subject = str(args.subject).zfill(2)
+    create_subject_design_matrices(subject)
