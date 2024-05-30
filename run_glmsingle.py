@@ -10,19 +10,22 @@ from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_f
 
 def run_glmsingle(subject, session):
 
-    design_matrices_aot, design_matrices_control = create_session_design_matrices(
+    design_aot, design_control = create_session_design_matrices(
         subject, session)
+    designs = {'aot': design_aot, 'control': design_control}
     bold_data = construct_bold_for_one_session(
         subject, session, 'T1W', 'nordicstc')
 
-    output_dir = DIR_OUTPUT / \
-        f'sub-{subject.zfill(3)}' / f'ses-{session}' / 'GLMsingle'
-    os.makedirs(output_dir, exist_ok=True)
-    params = {'wantlibrary': 1, 'wantglmdenoise': 1, 'wantfracridge': 1, 'wantfileoutputs': [
-        1, 1, 1, 1]}
-    for design_matrices_type in (design_matrices_aot, design_matrices_control):
+    for label, design in designs.items():
+        print('RUNNING GLMSINGLE FOR:', label)
+        output_dir = DIR_OUTPUT / \
+            f'sub-{subject.zfill(3)}' / f'ses-{session}' / f'GLMsingle_{label}'
+        os.makedirs(output_dir, exist_ok=True)
+
+        params = {'wantlibrary': 1, 'wantglmdenoise': 1,
+                  'wantfracridge': 1, 'wantfileoutputs': [1, 1, 1, 1]}
         glm = GLM_single(params)
-        glm.fit(design=design_matrices_type, data=bold_data, stimdur=2.5,
+        glm.fit(design=design, data=bold_data, stimdur=2.5,
                 tr=0.9, outputdir=str(output_dir), figuredir=str(output_dir))
 
 
