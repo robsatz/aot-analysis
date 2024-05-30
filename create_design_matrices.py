@@ -42,8 +42,8 @@ def get_feature_indices(tr_label, prior_videos):
         prior_videos.append(video_id)
 
     # -1 for zero-indexing, *2 for two conditions per video
-    feature_idx_aot = (video_id - 1) * 2 + is_reverse
-    feature_idx_control = (video_id - 1) * 2 + is_repeat
+    feature_idx_aot = (video_id - 1) * 2 + int(is_reverse)
+    feature_idx_control = (video_id - 1) * 2 + int(is_repeat)
 
     return feature_idx_aot, feature_idx_control, prior_videos
 
@@ -108,9 +108,9 @@ def create_session_design_matrices(subject, session):
             f'sub-{subject}' / f'ses-{session}' / 'design_matrices'
         os.makedirs(output_path, exist_ok=True)
         np.save(output_path /
-                f'sub-{subject}_ses-{session}_design_matrix_aot.npy', design_matrices_aot[run_idx])
+                f'sub-{subject}_ses-{session}_run-{str(run_idx+1).zfill(2)}_design_matrix_aot.npy', design_matrices_aot[run_idx])
         np.save(output_path /
-                f'sub-{subject}_ses-{session}_design_matrix_control.npy', design_matrices_control[run_idx])
+                f'sub-{subject}_ses-{session}_run-{str(run_idx+1).zfill(2)}_design_matrix_control.npy', design_matrices_control[run_idx])
 
     return design_matrices_aot, design_matrices_control
 

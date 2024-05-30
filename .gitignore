@@ -165,6 +165,13 @@ GLMsingle/
 patch-denoising/
 preprocessing/
 
+# data/sub-projects
+derivatives/
+results/
+semantics/
+laminar_analyses/
+*.ipynb
+
 # misc
 .vscode/
 bids_data/
