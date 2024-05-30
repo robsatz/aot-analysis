@@ -63,10 +63,6 @@ def create_run_design_matrices(tr_sequence, prior_videos, subject, session, run)
             design_matrix_aot[tr_index][feature_idx_aot] = 1
             design_matrix_control[tr_index][feature_idx_control] = 1
 
-    # # remove unused features from design matrices
-    # used_features = np.where(np.sum(design_matrix_aot, axis=0) != 0)[0]
-    # design_matrix_aot = design_matrix_aot[:, used_features]
-    # design_matrix_control = design_matrix_control[:, used_features]
     return design_matrix_aot, design_matrix_control, prior_videos
 
 
