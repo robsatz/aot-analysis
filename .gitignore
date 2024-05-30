@@ -164,6 +164,7 @@ arrow_of_time_experiment/
 GLMsingle/
 patch-denoising/
 preprocessing/
+pymoten/
 
 # data/sub-projects
 derivatives/
