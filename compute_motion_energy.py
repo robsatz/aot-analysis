@@ -5,16 +5,15 @@ import pickle
 
 
 def compute_motion_energy(video_file):
-    # nimages = 60  # extract first 1s of frames
     luminance_images = moten.io.video2luminance(
-        str(DIR_VIDEOS / video_file))
-    print(luminance_images.shape)
-
+        str(DIR_VIDEOS / video_file), size=(192, 108))
     nimages, vdim, hdim = luminance_images.shape
     print(nimages, vdim, hdim)
+
     pyramid = moten.get_default_pyramid(vhsize=(vdim, hdim), fps=FPS)
     features = pyramid.project_stimulus(luminance_images)
     print(features.shape)
+
     return features
 
 
