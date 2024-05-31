@@ -1,0 +1,8 @@
+motion_energy:
+  size: [160, 240]
+  fps: 24
+glmsingle:
+
+paths:
+  stimuli: '/tank/shared/2024/visual/AOT/derivatives/stimuli/rescaled_final'
+  motion_energy: './motion_energy_features'

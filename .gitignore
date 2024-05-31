@@ -165,9 +165,11 @@ GLMsingle/
 patch-denoising/
 preprocessing/
 pymoten/
+prfpy/
 
 # data/sub-projects
 derivatives/
+motion_energy_features/
 results/
 semantics/
 laminar_analyses/
