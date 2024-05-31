@@ -21,7 +21,7 @@ def compute_motion_energy(pyramid, video_file):
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
 DIR_STIMULI = Path(core_settings['paths']['stimuli'])
-DIR_BASE = Path('./')
+DIR_BASE = Path('.')
 DIR_MOTION_ENERGY = DIR_BASE / core_settings['paths']['motion_energy']
 DIR_MOTION_ENERGY_VIDEO_FEATURES = DIR_MOTION_ENERGY / 'video_features'
 SIZE = core_settings['motion_energy']['size']
@@ -38,6 +38,9 @@ if __name__ == '__main__':
     video_files = [file for file in stimuli_files if file.endswith('_fw.mp4')]
 
     pyramid = moten.get_default_pyramid(vhsize=SIZE, fps=FPS)
+    with open(DIR_MOTION_ENERGY / 'pyramid.pkl', 'wb') as f:
+        pickle.dump(pyramid, f)
+
     # init array to store features for all videos
     features = np.zeros((len(video_files), pyramid.nfilters))
 

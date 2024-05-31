@@ -6,6 +6,7 @@ import nibabel as nib
 import argparse
 from create_design_matrices import create_session_design_matrices
 from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_for_one_session
+import yaml
 
 
 def run_glmsingle(subject, session):
@@ -14,7 +15,7 @@ def run_glmsingle(subject, session):
         subject, session)
     designs = {'aot': design_aot, 'control': design_control}
     bold_data = construct_bold_for_one_session(
-        subject, session, 'T1W', 'nordicstc')
+        subject, session, DATATYPE, NORDICTYPE)
 
     for label, design in designs.items():
         print('RUNNING GLMSINGLE FOR:', label)
@@ -22,16 +23,17 @@ def run_glmsingle(subject, session):
             f'sub-{subject.zfill(3)}' / f'ses-{session}' / f'GLMsingle_{label}'
         os.makedirs(output_dir, exist_ok=True)
 
-        params = {'wantlibrary': 1, 'wantglmdenoise': 1,
-                  'wantfracridge': 1, 'wantfileoutputs': [1, 1, 1, 1]}
-        glm = GLM_single(params)
+        glm = GLM_single(PARAMS)
         glm.fit(design=design, data=bold_data, stimdur=2.5,
                 tr=0.9, outputdir=str(output_dir), figuredir=str(output_dir))
 
 
-DIR_DATA = Path(
-    '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc1')
-DIR_OUTPUT = Path('./derivatives')
+core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+DIR_DATA = Path(core_settings['paths']['data'])
+DIR_OUTPUT = Path(core_settings['paths']['derivatives'])
+PARAMS = core_settings['glmsingle']['params']
+DATATYPE = core_settings['glmsingle']['datatype']
+NORDICTYPE = core_settings['glmsingle']['nordictype']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
