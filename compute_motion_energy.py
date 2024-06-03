@@ -7,16 +7,31 @@ import numpy as np
 import yaml
 
 
-def compute_motion_energy(pyramid, video_file):
+def compute_motion_energy(pyramid, input_filename, output_filename):
     luminance_images = moten.io.video2luminance(
-        str(DIR_STIMULI / video_file), size=SIZE)
+        str(DIR_STIMULI / input_filename), size=SIZE)
     nimages, vdim, hdim = luminance_images.shape
     print('Shape of videos (spatially downsampled):', nimages, vdim, hdim)
 
     features = pyramid.project_stimulus(luminance_images)
-    video_avg = np.mean(features, axis=0)
+    np.save(output_filename, features)
+    return features
 
-    return video_avg
+
+def get_motion_energy(pyramid, video_filename):
+    video_id = video_filename[:4]  # e.g. 0001
+    video_features_filename = DIR_MOTION_ENERGY / \
+        'video_features' / (video_id + '.npy')
+    if os.path.exists(video_filename) and not args.recompute:
+        print(f'Loading existing features for video {video_id}')
+        video_features = np.load(video_features_filename)
+    else:
+        video_features = compute_motion_energy(
+            pyramid, video_filename, video_features_filename)
+
+    video_avg = np.mean(video_features, axis=0)
+    video_idx = (int(video_id[:4]) - 1)
+    features[video_idx, :] = video_avg
 
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
@@ -45,19 +60,8 @@ if __name__ == '__main__':
     features = np.zeros((len(video_files), pyramid.nfilters))
 
     for i, video_file in enumerate(video_files):
-        video_id, _ = os.path.splitext(video_file)
-        output_file = DIR_MOTION_ENERGY / \
-            'video_features' / (video_id + '.npy')
-        if os.path.exists(output_file) and not args.recompute:
-            print(f'Loading existing features for {video_file}')
-            video_features = np.load(output_file)
-        else:
-            video_features = compute_motion_energy(pyramid, video_file)
-            np.save(output_file, video_features)
-
-        is_reverse = (video_id[5:7] == 'rv')
-        video_idx = (int(video_id[:4]) - 1) + int(is_reverse)
-        features[video_idx, :] = video_features
+        print(f'Processing video {video_file} ({i+1}/{len(video_files)})')
+        get_motion_energy(pyramid, video_file)
 
     # save features for all videos
     np.save(DIR_MOTION_ENERGY / 'motion_energy_all.npy', features)
