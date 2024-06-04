@@ -1,9 +1,7 @@
 import os
 import numpy as np
 from pathlib import Path
-from pprint import pprint
 import yaml
-import pandas as pd
 import argparse
 
 
@@ -37,9 +35,9 @@ def get_feature_indices(tr_label, prior_videos):
     """
     video_id = int(tr_label[:4])
     is_reverse = (tr_label[5:7] == 'rv')
-    is_repeat = (video_id in prior_videos)
+    is_repeat = (tr_label in prior_videos)
     if not is_repeat:
-        prior_videos.append(video_id)
+        prior_videos.append(tr_label)
 
     # -1 for zero-indexing, *2 for two conditions per video
     feature_idx_aot = (video_id - 1) * 2 + int(is_reverse)
@@ -48,7 +46,7 @@ def get_feature_indices(tr_label, prior_videos):
     return feature_idx_aot, feature_idx_control, prior_videos
 
 
-def create_run_design_matrices(tr_sequence, prior_videos, subject, session, run):
+def create_run_design_matrices(tr_sequence, prior_videos):
     # initialize design matrix with shape: n_TRs, n_features (n_video_ids + 1 placeholder -- later filled with is_reverse or is_repeat)
     n_features = 4358
     design_matrix_aot = np.zeros(
@@ -80,7 +78,7 @@ def create_session_design_matrices(subject, session):
         run = str(run_idx + 1).zfill(2)
         tr_sequence = get_tr_sequence(subject, session, run)
         design_matrix_aot, design_matrix_control, prior_videos = create_run_design_matrices(
-            tr_sequence, prior_videos, subject, session, run)
+            tr_sequence, prior_videos)
         design_matrices_aot.append(design_matrix_aot)
         design_matrices_control.append(design_matrix_control)
 
