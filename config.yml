@@ -1,6 +1,3 @@
-motion_energy:
-  size: [160, 240]
-  fps: 24
 glmsingle:
   datatype: 'T1W'
   nordictype: 'nordicstc'
@@ -11,6 +8,12 @@ glmsingle:
     wantfracridge: 1
     wantglmdenoise: 1
     wantfileoutputs: [1, 1, 1, 1]
+motion_energy:
+  size: [160, 240]
+  fps: 24
+fracridge:
+  threshold: 100
+
 
 paths:
   stimuli: '/tank/shared/2024/visual/AOT/derivatives/stimuli/rescaled_final'
