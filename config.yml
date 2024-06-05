@@ -13,6 +13,9 @@ motion_energy:
   fps: 24
 fracridge:
   threshold: 100
+prf_experiment:
+  fps: 15
+  vhsize: [512, 512]
 
 
 paths:
@@ -20,3 +23,7 @@ paths:
   data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc1'
   motion_energy: './motion_energy_features'
   derivatives: './derivatives'
+  prf_experiment:
+    base: './prf_experiment'
+    input: 'logs'
+    output: 'stimuli'
