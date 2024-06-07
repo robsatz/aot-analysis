@@ -39,20 +39,19 @@ def get_feature_indices(tr_label, prior_videos):
     if not is_repeat:
         prior_videos.append(tr_label)
 
-    # -1 for zero-indexing, *2 for two conditions per video
+    # -1 for zero-indexing, * 2 for two conditions per video
     feature_idx_aot = (video_id - 1) * 2 + int(is_reverse)
     feature_idx_control = (video_id - 1) * 2 + int(is_repeat)
 
     return feature_idx_aot, feature_idx_control, prior_videos
 
 
-def create_run_design_matrices(tr_sequence, prior_videos):
-    # initialize design matrix with shape: n_TRs, n_features (n_video_ids + 1 placeholder -- later filled with is_reverse or is_repeat)
-    n_features = 4358
+def create_run_design_matrices(tr_sequence, n_conditions, prior_videos):
+    # initialize design matrices with shape: number of TRs x number of all possible TR labels (unused columns are later pruned)
     design_matrix_aot = np.zeros(
-        (len(tr_sequence), n_features), dtype=int)
+        (len(tr_sequence), n_conditions), dtype=int)
     design_matrix_control = np.zeros(
-        (len(tr_sequence), n_features), dtype=int)
+        (len(tr_sequence), n_conditions), dtype=int)
 
     for tr_index, tr_label in enumerate(tr_sequence):
         if tr_label != BLANK:
@@ -65,20 +64,24 @@ def create_run_design_matrices(tr_sequence, prior_videos):
 
 
 def create_session_design_matrices(subject, session):
-    core_settings = yaml.load(
+    exp_settings = yaml.load(
         open(DIR_EXPERIMENT / 'core_exp_settings.yml'), Loader=yaml.FullLoader)
+    analysis_settings = yaml.load(
+        open('./config.yml'), Loader=yaml.FullLoader)
+    n_conditions = analysis_settings['glmsingle']['design_matrix']['n_conditions']
 
     design_matrices_aot = []
     design_matrices_control = []
     prior_videos = []
 
     # get run design matrices
-    n_runs = core_settings['various']['run_number']
+    n_runs = exp_settings['various']['run_number']
     for run_idx in range(n_runs):
         run = str(run_idx + 1).zfill(2)
         tr_sequence = get_tr_sequence(subject, session, run)
+        # prior_videos keeps track of video repeats
         design_matrix_aot, design_matrix_control, prior_videos = create_run_design_matrices(
-            tr_sequence, prior_videos)
+            tr_sequence, prior_videos, n_conditions)
         design_matrices_aot.append(design_matrix_aot)
         design_matrices_control.append(design_matrix_control)
 

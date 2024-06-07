@@ -1,5 +1,7 @@
 glmsingle:
-  input:
+  design_matrix:
+    n_features: 4358
+  data:
     datatype: 'T1W'
     nordictype: 'nordicstc'
   model:
@@ -14,7 +16,8 @@ motion_energy:
   size: [160, 240]
   fps: 24
 fracridge:
-  threshold: 100
+  threshold: .4 # if int: top N voxels, if float: all voxels with R2 > N
+  cv: 5
 prf_experiment:
   tr: .0667  # defines temporal resolution
   vhsize: [512, 512]
@@ -25,6 +28,9 @@ paths:
   data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc1'
   motion_energy: './motion_energy_features'
   derivatives: './derivatives'
+  aot_experiment: 
+    base: './arrow_of_time_experiment'
+    settings: 'aot/data/experiment/settings/main'
   prf_experiment:
     base: './prf_experiment'
     input: 'logs'

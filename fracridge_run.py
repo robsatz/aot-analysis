@@ -1,20 +1,18 @@
 import numpy as np
 import yaml
 from pathlib import Path
-from fracridge import fracridge
+from fracridge import FracRidgeRegressorCV
 import argparse
 import pickle
 import os
 
 
-def load_data(subject, session):
-    motion_energy = np.load(DIR_MOTION_ENERGY / 'motion_energy_all.npy')
-    glmsingle = np.load(DIR_DERIVATIVES /
-                        f'sub-{subject}/ses-{session}/GLMsingle_aot/TYPED_FITHRF_GLMDENOISE_RR.npy',  allow_pickle=True).item()
-    # beta weights from GLMsingle treated as neural response amplitudes
-    amplitudes, r2 = glmsingle['betasmd'], glmsingle['R2']
+def load_data(subject, session, condition):
 
-    return motion_energy, amplitudes, r2
+    glmsingle = np.load(DIR_DERIVATIVES /
+                        f'sub-{subject}/ses-{session}/GLMsingle_{condition}/TYPED_FITHRF_GLMDENOISE_RR.npy',  allow_pickle=True).item()
+    # beta weights from GLMsingle treated as neural response amplitudes
+    return glmsingle['betasmd'], glmsingle['R2']
 
 
 def select_voxels(amplitudes, r2, threshold=None):
@@ -22,7 +20,7 @@ def select_voxels(amplitudes, r2, threshold=None):
         r2 = r2.ravel()
         if type(threshold) == float:
             # select voxels with r2 > threshold
-            selected_ids = np.where(r2 > threshold)[0]
+            selected_ids = np.where(r2 > threshold * 100)[0]
         elif type(threshold) == int:
             # select top n
             valid_ids = np.where(~np.isnan(r2))[0]
@@ -60,15 +58,16 @@ def z_score(array, axis=0):
     return (array - mean) / std
 
 
-def model(X, y):
+def model(X, y, cv):
     # specifying default parameters for clarity
-    model = fracridge.FracRidgeRegressorCV(normalize=False, cv=5)
+    model = FracRidgeRegressorCV(normalize=False, cv=cv)
     model.fit(X, y)
     return model
 
 
-def save_model(model, subject, session):
-    path = DIR_DERIVATIVES / f'sub-{subject}/ses-{session}/fracridge'
+def save_model(model, subject, session, condition):
+    path = DIR_DERIVATIVES / \
+        f'sub-{subject}/ses-{session}/fracridge_{condition}'
     os.makedirs(path, exist_ok=True)
     with open(path / 'model.pkl', 'wb') as f:
         pickle.dump(model, f)
@@ -76,27 +75,31 @@ def save_model(model, subject, session):
     np.save(path / 'alphas.npy', model.alpha_)
 
 
-def main(subject, session, threshold):
-    motion_energy, amplitudes, r2 = load_data(subject, session)
-    print(f'Shapes before transformations - motion energy: {motion_energy.shape} and amplitudes: {amplitudes.shape}'
-          )
+def main(subject, session, threshold, cv):
+    motion_energy = np.load(DIR_MOTION_ENERGY / 'motion_energy_all.npy')
 
-    amplitudes = select_voxels(amplitudes, r2, threshold=threshold)
+    for condition in ('aot', 'control'):
+        amplitudes, r2 = load_data(subject, session, condition)
+        print(f'Shapes before transformations - motion energy: {motion_energy.shape} and amplitudes: {amplitudes.shape}'
+              )
 
-    design_matrix = create_design_matrix(
-        motion_energy, amplitudes.shape[1], subject, session)
-    design_matrix, amplitudes = z_score(design_matrix), z_score(amplitudes.T)
+        amplitudes = select_voxels(amplitudes, r2, threshold=threshold)
 
-    print(f"Shapes after transformations - design: {design_matrix.shape}, amplitudes: {amplitudes.shape}"
-          )
+        design_matrix = create_design_matrix(
+            motion_energy, amplitudes.shape[1], subject, session)
+        design_matrix, amplitudes = z_score(
+            design_matrix), z_score(amplitudes.T)
 
-    fracridge_obj = model(design_matrix, amplitudes)
-    save_model(fracridge_obj, subject, session)
+        print(f"Shapes after transformations - design: {design_matrix.shape}, amplitudes: {amplitudes.shape}"
+              )
+
+        fracridge_obj = model(design_matrix, amplitudes, cv)
+        save_model(fracridge_obj, subject, session, condition)
 
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
-DIR_BASE = Path('arrow_of_time_experiment/aot')
-DIR_SETTINGS = DIR_BASE / 'data/experiment/settings/main'
+DIR_BASE = Path(core_settings['paths']['aot_experiment']['base'])
+DIR_SETTINGS = DIR_BASE / core_settings['paths']['aot_experiment']['settings']
 DIR_MOTION_ENERGY = Path(core_settings['paths']['motion_energy'])
 DIR_DERIVATIVES = Path(core_settings['paths']['derivatives'])
 
@@ -110,5 +113,6 @@ if __name__ == '__main__':
     subject = str(args.subject).zfill(3)
     session = str(args.session).zfill(2)
     threshold = core_settings['fracridge']['threshold']
+    cv = core_settings['fracridge']['cv']
 
-    main(subject, session, threshold)
+    main(subject, session, threshold, cv)
