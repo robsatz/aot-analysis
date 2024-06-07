@@ -43,30 +43,38 @@ def get_aperture_timing(seq_timing):
     return pd.concat(aperture_timing)
 
 
-def get_tr_aperture_indices(trs, aperture_timing):
-    query = """
-    SELECT
-        trs.tr_nr as tr_nr,
-        trs.trial_nr as trs_trial_nr,
-        trs.onset_shifted as trs_onset_shifted,
-        aperture_timing.trial_nr as trial_seq_trial_nr,
-        aperture_timing.seq_index as trial_seq_index,
-        aperture_timing.empirical_time as trial_seq_empirical_time
-    FROM
-        trs
-    LEFT JOIN
-        aperture_timing
-    ON
-        aperture_timing.empirical_time >= trs.onset_shifted
-        AND aperture_timing.empirical_time < trs.next_onset_shifted
-    """
-    tr_aperture_indices = psql.sqldf(query, locals())
-    tr_aperture_indices = tr_aperture_indices.groupby(
-        'tr_nr').mean('trial_seq_index')
-    return tr_aperture_indices
+def resample(data, temp_res, time_col, agg_cols):
+    # sample to temporal resolution
+    data['tr_index'] = np.floor(
+        data[time_col] // temp_res).astype(int)
+    return data.groupby(
+        'tr_index')[agg_cols].mean().reset_index()
 
 
-def map_apertures_to_trials(apertures, trial_list, result_df):
+# def join_apertures_to_pulses(trs, aperture_timing):
+#     query = """
+#     SELECT
+#         trs.tr_nr as tr_nr,
+#         trs.trial_nr as trs_trial_nr,
+#         trs.onset_shifted as trs_onset_shifted,
+#         aperture_timing.trial_nr as trial_seq_trial_nr,
+#         aperture_timing.seq_index as trial_seq_index,
+#         aperture_timing.empirical_time as trial_seq_empirical_time
+#     FROM
+#         trs
+#     LEFT JOIN
+#         aperture_timing
+#     ON
+#         aperture_timing.empirical_time >= trs.onset_shifted
+#         AND aperture_timing.empirical_time < trs.next_onset_shifted
+#     """
+#     tr_aperture_indices = psql.sqldf(query, locals())
+#     tr_aperture_indices = tr_aperture_indices.groupby(
+#         'tr_nr').mean('trial_seq_index')
+#     return tr_aperture_indices
+
+
+def map_apertures_to_trials(apertures, trial_list, frames):
     condition_apertures = {condition.split(
         '_')[2]: frames for condition, frames in apertures.items()}
 
@@ -74,8 +82,8 @@ def map_apertures_to_trials(apertures, trial_list, result_df):
     print(trial_list)
     bar_directions = [
         trial for trial in trial_list if trial != -1]
-    trial_nrs = result_df[~result_df.trial_seq_trial_nr.isna()
-                          ].trial_seq_trial_nr.unique()
+    trial_nrs = frames[~frames.seq_index.isna()
+                       ].trial_nr.unique()
 
     # assign aperture to trial
     map_trial_nr_condition = {}
@@ -87,19 +95,29 @@ def map_apertures_to_trials(apertures, trial_list, result_df):
     return map_trial_nr_condition
 
 
-def create_design_matrix(result_df, map_trial_nr_condition, vhsize):
+def create_design_matrix(frames, map_trial_nr_condition, vhsize):
 
-    dm = np.zeros((len(result_df), vhsize[0], vhsize[1]))
+    dm = np.zeros((len(frames), vhsize[0], vhsize[1]))
 
-    for i in range(len(result_df)):
-        tr = result_df.iloc[i]
-        trial_nr = tr['trial_seq_trial_nr']
-        if np.isnan(trial_nr):
+    for i in range(len(frames)):
+        frame = frames.iloc[i]
+        trial_nr = int(frame['trial_nr'])
+        seq_index = frame['seq_index']
+        if np.isnan(seq_index):
             dm[i, :, :] = np.zeros((512, 512))  # blank frame
         else:
-            # taking middle frame within TR
-            dm[i, :, :] = map_trial_nr_condition[trial_nr][int(
-                tr['trial_seq_index'])]
+            # average proportionally over nearest frames
+            prop_next_frame = seq_index % 1
+            seq_index = int(seq_index)  # rounds down
+
+            current_aperture = map_trial_nr_condition[trial_nr][seq_index] * (
+                1-prop_next_frame)
+            if seq_index + 1 >= len(map_trial_nr_condition[trial_nr]):
+                next_aperture = np.zeros((512, 512))
+            else:
+                next_aperture = map_trial_nr_condition[trial_nr][seq_index +
+                                                                 1] * prop_next_frame
+            dm[i, :, :] = current_aperture + next_aperture
     return dm
 
 
@@ -110,14 +128,14 @@ def save_design_matrix(dm, subject, run):
     print('Design matrix saved at:', out_path)
 
 
-def create_gif(design_matrix, subject):
+def create_gif(design_matrix, tr, subject, run):
     num_frames = design_matrix.shape[0]
     print(design_matrix.shape)
 
     images = []
     for i in range(num_frames):
         fig, ax = plt.subplots()
-        ax.imshow(design_matrix[i, :, :])
+        ax.imshow(design_matrix[i, :, :], origin='lower')
         ax.set_title('Full run design matrix')
         ax.axis('off')
 
@@ -133,7 +151,7 @@ def create_gif(design_matrix, subject):
     gif_filename = DIR_OUTPUT / \
         f"sub-{str(subject).zfill(2)}_run-{
             str(run).zfill(2)}_design_matrix.gif"
-    imageio.mimsave(gif_filename, images, fps=15)  # Adjust fps as needed
+    imageio.mimsave(gif_filename, images, fps=1/tr)  # Adjust fps as needed
     print(f"Saved GIF: {gif_filename}")
 
 
@@ -155,13 +173,15 @@ if __name__ == '__main__':
 
     vhsize = params['vhsize']
     fps = params['fps']
+    tr = params['tr']
     bar_directions = exp_settings['stimuli']['bar_directions']
 
     for run in range(3, 11):
         events, seq_timing, apertures = load_data(args.subject, run)
-        trs = get_pulses(events)
+        # trs = get_pulses(events)
         aperture_timing = get_aperture_timing(seq_timing)
-        tr_aperture_indices = get_tr_aperture_indices(trs, aperture_timing)
+        aperture_timing = resample(aperture_timing, tr)
+        # tr_aperture_indices = get_tr_aperture_indices(trs, aperture_timing)
         map_trial_nr_condition = map_apertures_to_trials(
             apertures, bar_directions, tr_aperture_indices)
         dm = create_design_matrix(

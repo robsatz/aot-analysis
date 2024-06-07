@@ -4,37 +4,38 @@ from pathlib import Path
 from GLMsingle.glmsingle import GLM_single
 import nibabel as nib
 import argparse
-from create_design_matrices import create_session_design_matrices
+from glmsingle_create_design_matrix import create_session_design_matrices
 from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_for_one_session
 import yaml
 import copy
 
 
-def run_glmsingle(subject, session):
+def run_glmsingle(subject, session, input_params, model_params, fit_params):
+
+    bold_data = construct_bold_for_one_session(
+        subject, session, input_params['datatype'], input_params['nordictype'])
 
     design_aot, design_control = create_session_design_matrices(
         subject, session)
     designs = {'control': design_control, 'aot': design_aot}
-    bold_data = construct_bold_for_one_session(
-        subject, session, DATATYPE, NORDICTYPE)
 
     for label, design in designs.items():
         print('RUNNING GLMSINGLE FOR:', label)
+
         output_dir = DIR_OUTPUT / \
             f'sub-{subject.zfill(3)}' / f'ses-{session}' / f'GLMsingle_{label}'
         os.makedirs(output_dir, exist_ok=True)
-        print(PARAMS)
-        glm = GLM_single(copy.deepcopy(PARAMS))
-        glm.fit(design=design, data=bold_data, stimdur=2.5,
-                tr=0.9, outputdir=str(output_dir), figuredir=str(output_dir))
+        print(model_params, fit_params)
+
+        # copy avoids overwriting
+        glm = GLM_single(copy.deepcopy(model_params))
+        glm.fit(design=design, data=bold_data, stimdur=fit_params['stimdur'], tr=fit_params['tr'], outputdir=str(
+            output_dir), figuredir=str(output_dir))
 
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
 DIR_DATA = Path(core_settings['paths']['data'])
 DIR_OUTPUT = Path(core_settings['paths']['derivatives'])
-PARAMS = core_settings['glmsingle']['params']
-DATATYPE = core_settings['glmsingle']['datatype']
-NORDICTYPE = core_settings['glmsingle']['nordictype']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -45,4 +46,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     subject = str(args.subject).zfill(2)
     session = str(args.session).zfill(2)
-    run_glmsingle(subject, session)
+
+    glmsingle_settings = core_settings['glmsingle']
+    run_glmsingle(subject, session,
+                  input_params=glmsingle_settings['input'],
+                  model_params=glmsingle_settings['model'],
+                  fit_params=glmsingle_settings['fit']
+                  )

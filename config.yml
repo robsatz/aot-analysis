@@ -1,20 +1,22 @@
 glmsingle:
-  datatype: 'T1W'
-  nordictype: 'nordicstc'
-  stimdur: 2.5
-  tr: 0.9
-  params:
+  input:
+    datatype: 'T1W'
+    nordictype: 'nordicstc'
+  model:
     wantlibrary: 1
     wantfracridge: 1
     wantglmdenoise: 1
     wantfileoutputs: [1, 1, 1, 1]
+  fit:
+    stimdur: 2.5
+    tr: 0.9
 motion_energy:
   size: [160, 240]
   fps: 24
 fracridge:
   threshold: 100
 prf_experiment:
-  fps: 15
+  tr: .0667  # defines temporal resolution
   vhsize: [512, 512]
 
 
