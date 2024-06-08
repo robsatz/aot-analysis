@@ -19,7 +19,8 @@ fracridge:
   threshold: .4 # if int: top N voxels, if float: all voxels with R2 > N
   cv: 5
 prf_experiment:
-  tr: .0667  # defines temporal resolution
+  tr_canonical: .0667  # 15 fps
+  tr_output: .9  # defines temporal resolution
   vhsize: [512, 512]
 
 
