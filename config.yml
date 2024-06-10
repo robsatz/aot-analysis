@@ -19,14 +19,15 @@ fracridge:
   threshold: .4 # if int: top N voxels, if float: all voxels with R2 > N
   cv: 5
 prf_experiment:
-  tr_canonical: .0667  # 15 fps
-  tr_output: .9  # defines temporal resolution
   vhsize: [512, 512]
+  tr_canonical: .06667  # 15 fps
+  tr_output: .9  # tr used in acquisition
+  gif_speed: 100  # real-time = 1
 
 
 paths:
   stimuli: '/tank/shared/2024/visual/AOT/derivatives/stimuli/rescaled_final'
-  data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc1'
+  data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc_forcesyn'
   motion_energy: './motion_energy_features'
   derivatives: './derivatives'
   aot_experiment: 

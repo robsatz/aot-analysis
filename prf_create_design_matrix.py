@@ -22,7 +22,7 @@ def load_data(subject, run):
 
 def resample(data, temp_res, time_col, aggs):
     # sample to temporal resolution
-    data['tr_index'] = np.floor(
+    data.loc[:, 'tr_index'] = np.floor(
         data[time_col] / temp_res).astype(int)
     data = data.groupby(
         'tr_index').agg(aggs).reset_index()
@@ -38,16 +38,16 @@ def create_intervals(events, tr):
 
     # recode onset times as relative to first pulse
     start_event = pulses[pulses.phase == 1].iloc[0]
-    end_event = pulses.iloc[-1]
     pulses.loc[:, 'onset'] = pulses['onset'] - start_event.onset
-    pulses[pulses.onset >= 0]
+    pulses = pulses[pulses.onset >= 0]
 
     # resample to intervals of tr duration
     pulses = resample(pulses, tr, 'onset', {'trial_nr': 'min', 'onset': 'min'})
     pulses = pulses.rename(columns={'onset': 'pulse_onset'})
 
     # create full sequence of intervals of tr duration
-    n_intervals = end_event.onset//tr
+    end_event = pulses.iloc[-1]
+    n_intervals = end_event.pulse_onset//tr + 1
     all_intervals = pd.Series(
         np.arange(n_intervals).astype(int), name='tr_index')
 
@@ -70,6 +70,18 @@ def get_aperture_timing(seq_timing, tr):
         aperture_timing.append(trial_seq)
     aperture_timing = pd.concat(aperture_timing)
     return resample(aperture_timing, tr, 'expected_time', {'seq_index': ['min', 'max'], 'empirical_time': ['min', 'max'], 'trial_nr': ['min', 'max']})
+
+
+def test_intervals(intervals):
+    # check that all intervals are associated with exactly one aperture
+    assert intervals.tr_index.duplicated().sum(
+    ) == 0, "Some interval indices are duplicated"
+    assert intervals.trial_nr.isna().sum(
+    ) == 0, "Some intervals are not associated with any trial"
+    assert intervals.trial_nr_min.equals(
+        intervals.trial_nr_max), "Some intervals are associated with more than one trial"
+    assert intervals.seq_index_min.equals(
+        intervals.seq_index_max), "Some intervals are associated with more than one aperture"
 
 
 def map_apertures_to_trials(apertures, trial_list, frames):
@@ -95,16 +107,17 @@ def create_design_matrix(intervals, map_trial_nr_condition, tr_output, vhsize):
 
     # resample index to output tr
     intervals['tr_index'] = np.floor(
-        intervals['tr_onset'] / tr_output).astype(int)
+        (intervals['tr_onset'] + .00001  # prevents rounding errors
+         ) / tr_output).astype(int)
     n_intervals = intervals['tr_index'].max()
     dm = np.zeros((n_intervals, vhsize[0], vhsize[1]))
 
     for i in range(n_intervals):
         included_intervals = intervals[intervals['tr_index'] == i]
+
         apertures = []
         for _, frame in included_intervals.iterrows():
             start_seq_index = frame['seq_index_min']
-            # end_seq_index = frame['seq_index_max']
             trial_nr = int(frame['trial_nr'])
             if np.isnan(start_seq_index):
                 aperture = np.zeros(vhsize)
@@ -112,13 +125,14 @@ def create_design_matrix(intervals, map_trial_nr_condition, tr_output, vhsize):
                 aperture = map_trial_nr_condition[trial_nr][int(
                     start_seq_index)]
             apertures.append(aperture)
+
         dm[i, :, :] = np.mean(np.stack(apertures), axis=0)
     return dm
 
 
-def save_design_matrix(dm, subject, run):
+def save_design_matrix(dm, label, subject, run):
     out_path = DIR_OUTPUT /\
-        f'sub-{subject}_run-{run}_design_matrix.npy'
+        f'sub-{subject}_run-{run}_design_matrix_{label}.npy'
     np.save(out_path, dm)
     print('Design matrix saved at:', out_path)
 
@@ -169,20 +183,26 @@ if __name__ == '__main__':
     vhsize = params['vhsize']
     tr_canonical = params['tr_canonical']
     tr_output = params['tr_output']
+    gif_speed = params['gif_speed']
     bar_directions = exp_settings['stimuli']['bar_directions']
 
-    for run in range(3, 11):
+    for run in range(1, 11):
         events, seq_timing, apertures = load_data(args.subject, run)
 
         all_intervals = create_intervals(events, tr_canonical)
         aperture_timing = get_aperture_timing(seq_timing, tr_canonical)
         all_intervals = all_intervals.merge(
             aperture_timing, how='left', on='tr_index')
-
-        # tr_aperture_indices = get_tr_aperture_indices(pulses, aperture_timing)
+        test_intervals(all_intervals)
         map_trial_nr_condition = map_apertures_to_trials(
             apertures, bar_directions, all_intervals)
-        dm = create_design_matrix(
+
+        dm_canonical = create_design_matrix(
+            all_intervals, map_trial_nr_condition, tr_canonical, vhsize)
+        save_design_matrix(dm_canonical, 'canonical', args.subject, run)
+
+        dm_downsampled = create_design_matrix(
             all_intervals, map_trial_nr_condition, tr_output, vhsize)
-        create_gif(dm, tr_output / 100, args.subject,
-                   run)  # accelerate by 100x
+        save_design_matrix(dm_downsampled, 'downsampled', args.subject, run)
+        create_gif(dm_downsampled, tr_output / gif_speed, args.subject,
+                   run)
