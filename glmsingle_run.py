@@ -10,10 +10,36 @@ import yaml
 import copy
 
 
-def run_glmsingle(subject, session, input_params, model_params, fit_params):
+def save_niftis(subject, session):
+    aot = np.load(DIR_OUTPUT / 'GLMsingle_aot' /
+                  'TYPED_FITHRF_GLMDENOISE_RR.npy', allow_pickle=True).item()
+    control = np.load(DIR_OUTPUT / 'GLMsingle_control' /
+                      'TYPED_FITHRF_GLMDENOISE_RR.npy', allow_pickle=True).item()
+
+    aot_r2 = aot['R2']
+    control_r2 = control['R2']
+    r2diff = (aot_r2 - control_r2)
+
+    outputs = {
+        'R2aot': aot_r2,
+        'R2control': control_r2,
+        'R2diff': r2diff
+    }
+
+    header = nib.load(DIR_DATA / f'sub-{str(subject).zfill(3)}_ses-{str(session).zfill(
+        2)}_task-AOT_rec-nordicstc_run-1_space-T1w_part-mag_boldref.nii.gz').header
+
+    out_path = DIR_OUTPUT / 'GLMsingle_analysis'
+    os.makedirs(out_path, exist_ok=True)
+    for label, data in outputs.items():
+        nib.nifti1.Nifti1Image(data, header=header, affine=None).to_filename(
+            out_path / f'{label}.nii.gz')
+
+
+def run_glmsingle(subject, session, data_params, model_params, fit_params):
 
     bold_data = construct_bold_for_one_session(
-        subject, session, input_params['datatype'], input_params['nordictype'])
+        subject, session, data_params['datatype'], data_params['nordictype'])
 
     design_aot, design_control = create_session_design_matrices(
         subject, session)
@@ -49,7 +75,8 @@ if __name__ == '__main__':
 
     glmsingle_settings = core_settings['glmsingle']
     run_glmsingle(subject, session,
-                  input_params=glmsingle_settings['input'],
+                  data_params=glmsingle_settings['data'],
                   model_params=glmsingle_settings['model'],
                   fit_params=glmsingle_settings['fit']
                   )
+    save_niftis(subject, session)

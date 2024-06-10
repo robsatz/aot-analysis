@@ -46,12 +46,12 @@ def get_feature_indices(tr_label, prior_videos):
     return feature_idx_aot, feature_idx_control, prior_videos
 
 
-def create_run_design_matrices(tr_sequence, n_conditions, prior_videos):
+def create_run_design_matrices(tr_sequence, n_features, prior_videos):
     # initialize design matrices with shape: number of TRs x number of all possible TR labels (unused columns are later pruned)
     design_matrix_aot = np.zeros(
-        (len(tr_sequence), n_conditions), dtype=int)
+        (len(tr_sequence), n_features), dtype=int)
     design_matrix_control = np.zeros(
-        (len(tr_sequence), n_conditions), dtype=int)
+        (len(tr_sequence), n_features), dtype=int)
 
     for tr_index, tr_label in enumerate(tr_sequence):
         if tr_label != BLANK:
@@ -68,7 +68,7 @@ def create_session_design_matrices(subject, session):
         open(DIR_EXPERIMENT / 'core_exp_settings.yml'), Loader=yaml.FullLoader)
     analysis_settings = yaml.load(
         open('./config.yml'), Loader=yaml.FullLoader)
-    n_conditions = analysis_settings['glmsingle']['design_matrix']['n_conditions']
+    n_features = analysis_settings['glmsingle']['design_matrix']['n_features']
 
     design_matrices_aot = []
     design_matrices_control = []
@@ -81,7 +81,7 @@ def create_session_design_matrices(subject, session):
         tr_sequence = get_tr_sequence(subject, session, run)
         # prior_videos keeps track of video repeats
         design_matrix_aot, design_matrix_control, prior_videos = create_run_design_matrices(
-            tr_sequence, prior_videos, n_conditions)
+            tr_sequence, prior_videos, n_features)
         design_matrices_aot.append(design_matrix_aot)
         design_matrices_control.append(design_matrix_control)
 
