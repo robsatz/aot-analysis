@@ -1,6 +1,6 @@
 glmsingle:
   design_matrix:
-    n_features: 4358
+    n_features: 4358  # number of possible features across sessions - upper bound: final dm only contains used features
   data:
     datatype: 'T1W'
     nordictype: 'nordicstc'
