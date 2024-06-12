@@ -3,7 +3,6 @@ import yaml
 from pathlib import Path
 import os
 import pandas as pd
-import pandasql as psql
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,13 +19,16 @@ def load_data(subject, run):
     return events, seq_timing, apertures
 
 
-def resample(data, temp_res, time_col, aggs):
+def resample(data, tr, time_col, aggs, label):
     # sample to temporal resolution
     data.loc[:, 'tr_index'] = np.floor(
-        data[time_col] / temp_res).astype(int)
+        (data[time_col] + .00001  # prevents rounding errors
+         ) / tr).astype(int)
+
     data = data.groupby(
         'tr_index').agg(aggs).reset_index()
-    # convert column names to single level
+
+    # prevent multilevelcolumn names
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = [
             '_'.join(filter(None, col)) for col in data.columns]
@@ -34,22 +36,25 @@ def resample(data, temp_res, time_col, aggs):
 
 
 def create_intervals(events, tr):
-    pulses = events[events.event_type == 'pulse']
+    pulses = events[events.event_type == 'pulse'].copy()
 
-    # recode onset times as relative to first pulse
-    start_event = pulses[pulses.phase == 1].iloc[0]
-    pulses.loc[:, 'onset'] = pulses['onset'] - start_event.onset
-    pulses = pulses[pulses.onset >= 0]
+    # recode onset times to align with aperture onset times
+    start_time = pulses[pulses.phase == 1].iloc[0].onset
+    end_time = pulses['onset'].iloc[-1] - start_time
+    pulses.loc[:, 'onset'] = pulses['onset'] - start_time
 
     # resample to intervals of tr duration
-    pulses = resample(pulses, tr, 'onset', {'trial_nr': 'min', 'onset': 'min'})
-    pulses = pulses.rename(columns={'onset': 'pulse_onset'})
+    pulses = resample(pulses, tr, 'onset', {
+                      'trial_nr': 'min', 'onset': 'min'}, 'pulses')
+    pulses = pulses.rename(
+        columns={'trial_nr_min': 'trial_nr', 'onset': 'pulse_onset'})
 
     # create full sequence of intervals of tr duration
-    end_event = pulses.iloc[-1]
-    n_intervals = end_event.pulse_onset//tr + 1
+    start_tr_index = pulses['tr_index'].iloc[0]  # can be negative
+    n_intervals = end_time // tr + 1
+    print(start_tr_index, n_intervals)
     all_intervals = pd.Series(
-        np.arange(n_intervals).astype(int), name='tr_index')
+        np.arange(start_tr_index, n_intervals).astype(int), name='tr_index')
 
     # merge with pulses dataframe to get trial number and onset times
     all_intervals = pd.merge(all_intervals, pulses, how='left', on='tr_index')
@@ -69,7 +74,9 @@ def get_aperture_timing(seq_timing, tr):
         trial_seq['trial_nr'] = int(trial_id[-3:])
         aperture_timing.append(trial_seq)
     aperture_timing = pd.concat(aperture_timing)
-    return resample(aperture_timing, tr, 'expected_time', {'seq_index': ['min', 'max'], 'empirical_time': ['min', 'max'], 'trial_nr': ['min', 'max']})
+    aggregations = {'seq_index': ['min', 'max'], 'empirical_time': [
+        'min', 'max'], 'trial_nr': ['min', 'max']}
+    return resample(aperture_timing, tr, 'expected_time', aggregations, 'aperture_timing')
 
 
 def test_intervals(intervals):
@@ -80,6 +87,10 @@ def test_intervals(intervals):
     ) == 0, "Some intervals are not associated with any trial"
     assert intervals.trial_nr_min.equals(
         intervals.trial_nr_max), "Some intervals are associated with more than one trial"
+    aperture_trs = ~intervals.trial_nr_min.isna()
+    assert intervals.loc[aperture_trs, 'trial_nr'].equals(
+        intervals.loc[aperture_trs, 'trial_nr_min'].astype(int)), "Trial onset times do not align between events and apertures"
+
     assert intervals.seq_index_min.equals(
         intervals.seq_index_max), "Some intervals are associated with more than one aperture"
 
@@ -109,7 +120,7 @@ def create_design_matrix(intervals, map_trial_nr_condition, tr_output, vhsize):
     intervals['tr_index'] = np.floor(
         (intervals['tr_onset'] + .00001  # prevents rounding errors
          ) / tr_output).astype(int)
-    n_intervals = intervals['tr_index'].max()
+    n_intervals = intervals['tr_index'].max() + 1
     dm = np.zeros((n_intervals, vhsize[0], vhsize[1]))
 
     for i in range(n_intervals):
@@ -165,11 +176,10 @@ def create_gif(design_matrix, tr, subject, run):
 
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
-params = core_settings['prf_experiment']
-paths = core_settings['paths']['prf_experiment']
-DIR_BASE = Path(paths['base'])
-DIR_INPUT = DIR_BASE / paths['input']
-DIR_OUTPUT = DIR_BASE / paths['output']
+params = core_settings['prf']['design_matrix']
+DIR_BASE = Path(core_settings['paths']['prf_experiment']['base'])
+DIR_INPUT = DIR_BASE / core_settings['paths']['prf_experiment']['input']
+DIR_OUTPUT = DIR_BASE / core_settings['paths']['prf_experiment']['design']
 
 exp_settings = yaml.load(
     open(DIR_BASE / 'settings.yml'), Loader=yaml.FullLoader)

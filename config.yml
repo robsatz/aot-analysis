@@ -18,11 +18,15 @@ motion_energy:
 fracridge:
   threshold: .4 # if int: top N voxels, if float: all voxels with R2 > N
   cv: 5
-prf_experiment:
-  vhsize: [512, 512]
-  tr_canonical: .06667  # 15 fps
-  tr_output: .9  # tr used in acquisition
-  gif_speed: 100  # real-time = 1
+prf:
+  design_matrix:
+    vhsize: [512, 512]
+    tr_canonical: .06667  # 15 fps
+    tr_output: .9  # tr used in acquisition
+    gif_speed: 100  # real-time = 1
+  fit:
+    screen_size_cm: 40
+    screen_distance_cm: 200
 
 
 paths:
@@ -36,4 +40,5 @@ paths:
   prf_experiment:
     base: './prf_experiment'
     input: 'logs'
-    output: 'stimuli'
+    design: 'stimuli'
+    bold: '/tank/shared/2024/visual/AOT/temp/prftest/psc_average/'
