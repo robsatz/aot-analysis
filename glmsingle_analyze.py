@@ -29,18 +29,19 @@ def compute_diff(results_aot, results_control):
     r2diff = (aot_r2 - control_r2)
 
     return {
-        'R2aot': aot_r2,
-        'R2control': control_r2,
-        'R2diff': r2diff
+        'R2_aot': aot_r2,
+        'R2_control': control_r2,
+        'R2_diff': r2diff
     }
 
 
-def aggregate(diffs):
-    return {
-        'R2meandiff': np.mean(diffs, axis=0),
-        'R2stddiff': np.std(diffs, axis=0),
-        'R2mediandiff': np.median(diffs, axis=0)
-    }
+def aggregate(results):
+    aggregates = {}
+    for measure in ['R2_aot', 'R2_control', 'R2_diff']:
+        aggregates[f'{measure}_mean'] = np.mean(results[measure], axis=0)
+        aggregates[f'{measure}_median'] = np.median(results[measure], axis=0)
+        aggregates[f'{measure}_std'] = np.std(results[measure], axis=0)
+    return aggregates
 
 
 def save_niftis(out_dir, outputs, bold_header, subject, session=None, bold_img=None, bold_filename=None):
@@ -73,13 +74,16 @@ def compute_session_aggregates(subject, session, header):
 def compute_subject_aggregates(subject):
     subject = str(subject).zfill(3)
     bold_filename, bold_header, bold_img = load_bold(subject)
-    diffs = []
+    results = {}
     for session in range(1, 6):
         session = str(session).zfill(2)
         session_results = compute_session_aggregates(
             subject, session, bold_header)
-        diffs.append(session_results['R2diff'])
-    results = aggregate(diffs)
+        for measure in session_results:
+            if measure not in results:
+                results[measure] = []
+            results[measure].append(session_results[measure])
+    results = aggregate(results)
 
     out_dir = DIR_DERIVATIVES / f'sub-{subject}'
     save_niftis(out_dir, results, bold_header, subject,
