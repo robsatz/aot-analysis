@@ -7,6 +7,8 @@ import imageio
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+from scipy.ndimage import zoom
+import prf_utils
 
 
 def load_data(subject, run):
@@ -19,160 +21,158 @@ def load_data(subject, run):
     return events, seq_timing, apertures
 
 
-def resample(data, tr, time_col, aggs, label):
-    # sample to temporal resolution
-    data.loc[:, 'tr_index'] = np.floor(
-        (data[time_col] + .00001  # prevents rounding errors
-         ) / tr).astype(int)
+def resample(timepoints, tr, time_col, aggs):
+    timepoints = timepoints.sort_values('onset')
 
-    data = data.groupby(
+    # sample to temporal resolution
+    timepoints.loc[:, 'tr_index'] = np.floor(
+        (timepoints[time_col]) / tr).astype(int)
+
+    timepoints = timepoints.groupby(
         'tr_index').agg(aggs).reset_index()
 
     # prevent multilevelcolumn names
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = [
-            '_'.join(filter(None, col)) for col in data.columns]
-    return data
+    if isinstance(timepoints.columns, pd.MultiIndex):
+        timepoints.columns = [
+            '_'.join(filter(None, col)) for col in timepoints.columns]
+    return timepoints
 
 
-def create_intervals(events, tr):
+def prevent_cutoff(experiment_events, timepoints, tr):
+    # prevent final tr being cut off by upsampling
+    # assumes last tr is blank
+    tr_acquisition = np.median(np.diff(experiment_events['onset']))
+    duration = len(experiment_events) * tr_acquisition
+    final_tr_index = duration // tr
+    # get last timepoint as dataframe to facilitate appending to timepoints
+    final_timepoint = timepoints.iloc[[-1]].copy()
+    final_timepoint.loc[:, 'tr_index'] = final_tr_index
+    timepoints = pd.concat([timepoints, final_timepoint]
+                           )
+    return timepoints
+
+
+def resize(dm, vhsize):
+    print(f'Resizing frames from {dm.shape[1:]} to {vhsize}')
+    step_vertical = int(dm.shape[1] / vhsize[0])
+    step_horizontal = int(dm.shape[2] / vhsize[1])
+    shift_vertical = int(step_vertical / 2)
+    shift_horizontal = int(step_horizontal / 2)
+
+    return dm[:, shift_vertical::step_vertical, shift_horizontal::step_horizontal]
+
+
+def get_experiment_events(events):
+
     pulses = events[events.event_type == 'pulse'].copy()
+    pulses.loc[:,
+               'bar_direction'] = pulses['bar_direction'].fillna(BLANK)
 
-    # recode onset times to align with aperture onset times
-    start_time = pulses[pulses.phase == 1].iloc[0].onset
-    end_time = pulses['onset'].iloc[-1] - start_time
-    pulses.loc[:, 'onset'] = pulses['onset'] - start_time
+    # recode onsets to start at 0
+    start = pulses['onset'].min()
+    pulses.loc[:, 'onset'] -= start
+    end = pulses['onset'].max()
 
-    # resample to intervals of tr duration
-    pulses = resample(pulses, tr, 'onset', {
-                      'trial_nr': 'min', 'onset': 'min'}, 'pulses')
-    pulses = pulses.rename(
-        columns={'trial_nr_min': 'trial_nr', 'onset': 'pulse_onset'})
+    # detect delay to first trial: later used as reference point for aperture events
+    aperture_start = pulses.loc[pulses.phase == 1, 'onset'].min()
 
-    # create full sequence of intervals of tr duration
-    start_tr_index = pulses['tr_index'].iloc[0]  # can be negative
-    n_intervals = end_time // tr + 1
-    print(start_tr_index, n_intervals)
-    all_intervals = pd.Series(
-        np.arange(start_tr_index, n_intervals).astype(int), name='tr_index')
+    # # resample pulses to tr
+    # aggregations = {'trial_nr': 'min', 'onset': 'min', 'bar_direction': 'min'}
+    # experiment_events = resample(pulses, tr, 'onset', aggregations)
 
-    # merge with pulses dataframe to get trial number and onset times
-    all_intervals = pd.merge(all_intervals, pulses, how='left', on='tr_index')
-    all_intervals['tr_onset'] = all_intervals['tr_index'] * tr
-    # trial_n is nan if no pulse occured in interval - fill with last populated trial_nr
-    all_intervals['trial_nr'] = all_intervals['trial_nr'].ffill().astype(int)
-
-    return all_intervals
+    return pulses[['trial_nr', 'onset', 'bar_direction']], aperture_start, end
 
 
-def get_aperture_timing(seq_timing, tr):
-    headers = ['seq_index', 'expected_time', 'empirical_time']
-    aperture_timing = []
+def get_aperture_events(seq_timing, delay):
+    # concatenate aperture events for all bar directions
+    aperture_events = []
     for trial_id in seq_timing.keys():
         trial_seq = pd.DataFrame(
-            seq_timing[trial_id]['apertures']['block0_values'], columns=headers)
+            seq_timing[trial_id]['apertures']['block0_values'], columns=['seq_index', 'expected_time', 'empirical_time'])
         trial_seq['trial_nr'] = int(trial_id[-3:])
-        aperture_timing.append(trial_seq)
-    aperture_timing = pd.concat(aperture_timing)
-    aggregations = {'seq_index': ['min', 'max'], 'empirical_time': [
-        'min', 'max'], 'trial_nr': ['min', 'max']}
-    return resample(aperture_timing, tr, 'expected_time', aggregations, 'aperture_timing')
+        aperture_events.append(trial_seq)
+    aperture_events = pd.concat(aperture_events)
+
+    # shift onset times to align with events dataset
+    aperture_events['onset'] = aperture_events['empirical_time'] + delay
+
+    return aperture_events[['trial_nr', 'seq_index', 'onset']]
 
 
-def test_intervals(intervals):
-    # check that all intervals are associated with exactly one aperture
-    assert intervals.tr_index.duplicated().sum(
-    ) == 0, "Some interval indices are duplicated"
-    assert intervals.trial_nr.isna().sum(
-    ) == 0, "Some intervals are not associated with any trial"
-    assert intervals.trial_nr_min.equals(
-        intervals.trial_nr_max), "Some intervals are associated with more than one trial"
-    aperture_trs = ~intervals.trial_nr_min.isna()
-    assert intervals.loc[aperture_trs, 'trial_nr'].equals(
-        intervals.loc[aperture_trs, 'trial_nr_min'].astype(int)), "Trial onset times do not align between events and apertures"
+def create_timepoints(experiment_events, aperture_events, tr):
+    events = pd.concat([experiment_events, aperture_events], axis=0)
+    timepoints = resample(events, tr, 'onset', ['min', 'max', 'count'])
+    timepoints = prevent_cutoff(experiment_events, timepoints, tr)
+    timepoints['tr_onset'] = timepoints['tr_index'] * tr
+    timepoints = timepoints.sort_values('tr_onset').reset_index(drop=True)
 
-    assert intervals.seq_index_min.equals(
-        intervals.seq_index_max), "Some intervals are associated with more than one aperture"
+    # forward fill bar_direction
+    timepoints.loc[:,
+                   'bar_direction_min'] = timepoints['bar_direction_min'].ffill()
+    prf_utils.test_alignment(timepoints)
+    return timepoints
 
 
-def map_apertures_to_trials(apertures, trial_list, frames):
-    condition_apertures = {condition.split(
-        '_')[2]: frames for condition, frames in apertures.items()}
+def create_design_matrix(timepoints, apertures, vhsize):
+    condition_apertures = {int(condition.split(
+        '_')[2]): frames for condition, frames in apertures.items()}
 
-    # remove blank trials
-    bar_directions = [
-        trial for trial in trial_list if trial != -1]
-    trial_nrs = frames[~frames.seq_index_min.isna()
-                       ].trial_nr.unique()
+    # missing timepoints represented as blanks
+    n_timepoints = timepoints['tr_index'].max() + 1
+    dm = np.zeros((n_timepoints, vhsize[0], vhsize[1]))
 
-    # assign aperture to trial
-    map_trial_nr_condition = {}
-    for i, trial_nr in enumerate(trial_nrs):
-        bar_direction = str(bar_directions[i])
-        map_trial_nr_condition[trial_nr] = condition_apertures[bar_direction]
-
-    return map_trial_nr_condition
-
-
-def create_design_matrix(intervals, map_trial_nr_condition, tr_output, vhsize):
-
-    # resample index to output tr
-    intervals['tr_index'] = np.floor(
-        (intervals['tr_onset'] + .00001  # prevents rounding errors
-         ) / tr_output).astype(int)
-    n_intervals = intervals['tr_index'].max() + 1
-    dm = np.zeros((n_intervals, vhsize[0], vhsize[1]))
-
-    for i in range(n_intervals):
-        included_intervals = intervals[intervals['tr_index'] == i]
+    for i in range(n_timepoints):
+        included_timepoints = timepoints[timepoints['tr_index'] == i]
 
         apertures = []
-        for _, frame in included_intervals.iterrows():
+        for _, frame in included_timepoints.iterrows():
             start_seq_index = frame['seq_index_min']
-            trial_nr = int(frame['trial_nr'])
-            if np.isnan(start_seq_index):
-                aperture = np.zeros(vhsize)
-            else:
-                aperture = map_trial_nr_condition[trial_nr][int(
+            if not (np.isnan(start_seq_index)):
+                aperture = condition_apertures[int(frame['bar_direction_min'])][int(
                     start_seq_index)]
-            apertures.append(aperture)
-
-        dm[i, :, :] = np.mean(np.stack(apertures), axis=0)
+                apertures.append(aperture)
+        if len(apertures) != 0:
+            dm[i, :, :] = np.mean(np.stack(apertures), axis=0)
     return dm
 
 
 def save_design_matrix(dm, label, subject, run):
     out_path = DIR_OUTPUT /\
-        f'sub-{subject}_run-{run}_design_matrix_{label}.npy'
+        f'sub-{str(subject).zfill(2)}_run-{run}_design_matrix_{label}.npy'
     np.save(out_path, dm)
     print('Design matrix saved at:', out_path)
 
 
-def create_gif(design_matrix, tr, subject, run):
-    num_frames = design_matrix.shape[0]
-    print(design_matrix.shape)
+def create_subject_design_matrices(subject, tr_canonical, tr_output, vhsize_canonical, vhsize_output, gif_speed):
+    dms = []
+    for run in range(1, 11):
+        print(f'Creating design matrix for subject {subject}, run {run}.')
+        events, seq_timing, apertures = load_data(subject, run)
+        experiment_events, aperture_start, end = get_experiment_events(
+            events)
+        print(f'Number of pulses: {len(experiment_events)}')
+        aperture_events = get_aperture_events(seq_timing, aperture_start)
 
-    images = []
-    for i in range(num_frames):
-        fig, ax = plt.subplots()
-        ax.imshow(design_matrix[i, :, :], origin='lower')
-        ax.set_title(f'Design Matrix for Run {run}')
-        ax.axis('off')
+        # create canonical design matrix sampled at stimulus FPS
+        timepoints = create_timepoints(
+            experiment_events, aperture_events, tr_canonical)
+        design_matrix_canonical = create_design_matrix(
+            timepoints, apertures, vhsize_canonical)
+        save_design_matrix(design_matrix_canonical, 'canonical', subject, run)
 
-        # Save the frame as an image in memory
-        fig.canvas.draw()
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
-        image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        images.append(image)
+        # downsample temporally (to scanner/acquisition TR)
+        timepoints.loc[:, 'tr_index'] = timepoints['tr_onset'] // tr_output
+        design_matrix_output = create_design_matrix(
+            timepoints, apertures, vhsize_canonical)
+        # downsample spatially
+        design_matrix_output = resize(design_matrix_output, vhsize_output)
+        save_design_matrix(design_matrix_output, 'output', subject, run)
 
-        plt.close(fig)  # Close the figure to avoid memory issues
+        prf_utils.create_gif(design_matrix_output,
+                             tr_output / gif_speed, 'output', subject, run)
 
-    # Save the sequence as a GIF
-    gif_filename = DIR_OUTPUT / \
-        (f"sub-{str(subject).zfill(2)}"
-         + f"_run-{str(run).zfill(2)}_design_matrix.gif")
-    imageio.mimsave(gif_filename, images, fps=1/tr)  # Adjust fps as needed
-    print(f"Saved GIF: {gif_filename}")
+        dms.append(design_matrix_output)
+    return dms
 
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
@@ -180,9 +180,7 @@ params = core_settings['prf']['design_matrix']
 DIR_BASE = Path(core_settings['paths']['prf_experiment']['base'])
 DIR_INPUT = DIR_BASE / core_settings['paths']['prf_experiment']['input']
 DIR_OUTPUT = DIR_BASE / core_settings['paths']['prf_experiment']['design']
-
-exp_settings = yaml.load(
-    open(DIR_BASE / 'settings.yml'), Loader=yaml.FullLoader)
+BLANK = params['blank']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -190,29 +188,11 @@ if __name__ == '__main__':
                         help="Subject number.")
     args = parser.parse_args()
 
-    vhsize = params['vhsize']
     tr_canonical = params['tr_canonical']
     tr_output = params['tr_output']
+    vhsize_canonical = params['vhsize_canonical']
+    vhsize_output = params['vhsize_output']
     gif_speed = params['gif_speed']
-    bar_directions = exp_settings['stimuli']['bar_directions']
 
-    for run in range(1, 11):
-        events, seq_timing, apertures = load_data(args.subject, run)
-
-        all_intervals = create_intervals(events, tr_canonical)
-        aperture_timing = get_aperture_timing(seq_timing, tr_canonical)
-        all_intervals = all_intervals.merge(
-            aperture_timing, how='left', on='tr_index')
-        test_intervals(all_intervals)
-        map_trial_nr_condition = map_apertures_to_trials(
-            apertures, bar_directions, all_intervals)
-
-        dm_canonical = create_design_matrix(
-            all_intervals, map_trial_nr_condition, tr_canonical, vhsize)
-        save_design_matrix(dm_canonical, 'canonical', args.subject, run)
-
-        dm_downsampled = create_design_matrix(
-            all_intervals, map_trial_nr_condition, tr_output, vhsize)
-        save_design_matrix(dm_downsampled, 'downsampled', args.subject, run)
-        create_gif(dm_downsampled, tr_output / gif_speed, args.subject,
-                   run)
+    create_subject_design_matrices(
+        args.subject, tr_canonical, tr_output, vhsize_canonical, vhsize_output, gif_speed)

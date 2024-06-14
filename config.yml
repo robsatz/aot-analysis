@@ -20,8 +20,10 @@ fracridge:
   cv: 5
 prf:
   design_matrix:
-    vhsize: [512, 512]
-    tr_canonical: .06667  # 15 fps
+    blank: -1
+    vhsize_canonical: [512, 512]
+    vhsize_output: [128, 128]
+    tr_canonical: .066667  # 15 fps
     tr_output: .9  # tr used in acquisition
     gif_speed: 100  # real-time = 1
   fit:
