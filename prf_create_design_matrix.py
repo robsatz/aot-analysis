@@ -138,7 +138,8 @@ def create_design_matrix(timepoints, apertures, vhsize):
 
 def save_design_matrix(dm, label, subject, run):
     out_path = DIR_OUTPUT /\
-        f'sub-{str(subject).zfill(2)}_run-{run}_design_matrix_{label}.npy'
+        f'sub-{str(subject).zfill(2)}_run-{str(run).zfill(2)
+                                           }_design_matrix_{label}.npy'
     np.save(out_path, dm)
     print('Design matrix saved at:', out_path)
 

@@ -166,6 +166,7 @@ patch-denoising/
 preprocessing/
 pymoten/
 prfpy/
+snellius/
 
 # data/sub-projects
 derivatives/
