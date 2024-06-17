@@ -1,52 +1,56 @@
+
 import numpy as np
 import matplotlib.pyplot as pl
-import yaml
-import os
 from prfpy import stimulus, model, fit
+from prf_logger import FitLogger
+import yaml
+from pathlib import Path
 import numpy as np
-from scipy import io
 import nibabel as nib
-from datetime import datetime, timedelta
-import time
-import sys
-import prf_fit
-import logging
+import argparse
 
 
-class FitLogger():
-    def __init__(self, fitter, rsq_threshold):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        logging.basicConfig(level=logging.INFO)
-        self.fitter = fitter
-        self.rsq_threshold = rsq_threshold
+def load_data():
+    pass
 
-    def _reset_timer(self):
-        self.start = time.time()
 
-    def _print_time(self):
-        elapsed = (time.time() - self.start)
-        self.logger.log(
-            f"Elapsed time: {timedelta(seconds=elapsed)}", flush=True)
+def select_voxels():
+    pass
 
-    def grid_fit(self, params):
-        self._reset_timer()
-        self.fitter.grid_fit(params)
-        self._print_time()
-        self.save_results(self.fitter.gridsearch_params)
 
-    def iterative_fit(self, params):
-        self._reset_timer()
-        self.fitter.iterative_fit(params)
-        self._print_time()
-        self.save_results(self.fitter.iterative_search_params)
+def create_grid():
+    pass
 
-    def save_results(self, search_params):
-        gauss_grid = np.nan_to_num(search_params)
-        mean_rsq = np.mean(
-            gauss_grid[gauss_grid[:, -1] > self.rsq_threshold, -1])
-        self.log(mean_rsq)
-        pass
+
+def batch():
+    pass
+
+
+def fit_session_prfs(subject, session, slice_nr, n_jobs):
+    FitLogger()
+    pass
 
 
 config = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
-params = config['prf']['design_matrix']
+params = config['prf']
+
+paths = config['paths']['prf_experiment']
+DIR_BASE = Path(paths['base'])
+DIR_DESIGN = DIR_BASE / paths['design']
+DIR_DATA = Path(paths['bold'])
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-sub", "--subject", type=int, default=1,
+                        help="Subject number.")
+    parser.add_argument("-ses", "--session", type=int, default=1)
+    parser.add_argument("-slice", "--slice_nr", type=int, default=1)
+    parser.add_argument("-n_jobs", "--n_jobs", type=int, default=1)
+    args = parser.parse_args()
+
+    subject = args.subject
+    session = args.session
+    slice_nr = args.slice_nr
+    n_jobs = args.n_jobs
+
+    fit_session_prfs(subject, session, slice_nr, n_jobs)
