@@ -41,6 +41,7 @@ def aggregate(results):
         aggregates[f'{measure}_mean'] = np.mean(results[measure], axis=0)
         aggregates[f'{measure}_median'] = np.median(results[measure], axis=0)
         aggregates[f'{measure}_std'] = np.std(results[measure], axis=0)
+        aggregates[f'{measure}_stacked'] = np.stack(results[measure], axis=-1)
     return aggregates
 
 
@@ -77,12 +78,16 @@ def compute_subject_aggregates(subject):
     results = {}
     for session in range(1, 6):
         session = str(session).zfill(2)
-        session_results = compute_session_aggregates(
-            subject, session, bold_header)
-        for measure in session_results:
-            if measure not in results:
-                results[measure] = []
-            results[measure].append(session_results[measure])
+        try:
+            session_results = compute_session_aggregates(
+                subject, session, bold_header)
+            for measure in session_results:
+                if measure not in results:
+                    results[measure] = []
+                results[measure].append(session_results[measure])
+        except FileNotFoundError:
+            print(
+                f"TypeD results from session {session} not found for subject {subject}")
     results = aggregate(results)
 
     out_dir = DIR_DERIVATIVES / f'sub-{subject}'
