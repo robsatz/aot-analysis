@@ -5,6 +5,7 @@ import pickle
 import argparse
 import numpy as np
 import yaml
+import os
 
 
 def compute_motion_energy(pyramid, input_filename, output_filename):
@@ -18,20 +19,22 @@ def compute_motion_energy(pyramid, input_filename, output_filename):
     return features
 
 
-def get_motion_energy(pyramid, video_filename):
-    video_id = video_filename[:4]  # e.g. 0001
+def get_video_average(pyramid, video_filename):
+    video_condition, _ = os.path.splitext(video_filename)  # e.g. 0001_fw
     video_features_filename = DIR_MOTION_ENERGY / \
-        'video_features' / (video_id + '.npy')
+        'video_features' / (video_condition + '.npy')
     if os.path.exists(video_filename) and not args.recompute:
-        print(f'Loading existing features for video {video_id}')
+        print(f'Loading existing features for video {video_condition}')
         video_features = np.load(video_features_filename)
     else:
         video_features = compute_motion_energy(
             pyramid, video_filename, video_features_filename)
-
     video_avg = np.mean(video_features, axis=0)
-    video_idx = (int(video_id[:4]) - 1)
-    features[video_idx, :] = video_avg
+
+    video_id = int(video_condition[:4])
+    is_reverse = (video_condition[-2:] == 'rv')
+    video_idx = (video_id - 1) * 2 + int(is_reverse)
+    return video_idx, video_avg
 
 
 core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
@@ -39,7 +42,7 @@ DIR_STIMULI = Path(core_settings['paths']['stimuli'])
 DIR_BASE = Path('.')
 DIR_MOTION_ENERGY = DIR_BASE / core_settings['paths']['motion_energy']
 DIR_MOTION_ENERGY_VIDEO_FEATURES = DIR_MOTION_ENERGY / 'video_features'
-SIZE = core_settings['motion_energy']['size']
+SIZE = core_settings['motion_energy']['vhsize']
 FPS = core_settings['motion_energy']['fps']
 
 if __name__ == '__main__':
@@ -49,8 +52,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     os.makedirs(DIR_MOTION_ENERGY_VIDEO_FEATURES, exist_ok=True)
-    stimuli_files = os.listdir(DIR_STIMULI)
-    video_files = [file for file in stimuli_files if file.endswith('_fw.mp4')]
+    video_files = os.listdir(DIR_STIMULI)
 
     pyramid = moten.get_default_pyramid(vhsize=SIZE, fps=FPS)
     with open(DIR_MOTION_ENERGY / 'pyramid.pkl', 'wb') as f:
@@ -61,7 +63,8 @@ if __name__ == '__main__':
 
     for i, video_file in enumerate(video_files):
         print(f'Processing video {video_file} ({i+1}/{len(video_files)})')
-        get_motion_energy(pyramid, video_file)
+        video_idx, video_avg = get_video_average(pyramid, video_file)
+        features[video_idx, :] = video_avg
 
     # save features for all videos
     np.save(DIR_MOTION_ENERGY / 'motion_energy_all.npy', features)
