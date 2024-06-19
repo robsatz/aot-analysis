@@ -25,24 +25,19 @@ def load_amplitudes(subject, session, condition):
     return glmsingle['betasmd']
 
 
-def select_voxels(amplitudes, r2, threshold=None):
-    if threshold is not None:
-        r2 = r2.ravel()
-        if type(threshold) == float:
-            # select voxels with r2 > threshold
-            selected_ids = np.where(r2 > threshold * 100)[0]
-        elif type(threshold) == int:
-            # select top n
-            valid_ids = np.where(~np.isnan(r2))[0]
-            selected_ids = valid_ids[np.argsort(r2[valid_ids])[-threshold:]]
-        else:
-            raise ValueError('Invalid threshold type. Expected float or int.')
+def select_voxels(amplitudes, r2, rsq_threshold=None):
+    r2 = r2.ravel()
+    original_shape = amplitudes.shape
+    # flatten to n_voxels x n_trials
+    flattened_shape = (-1, original_shape[-1])
+    amplitudes = np.reshape(amplitudes, flattened_shape)
 
-        original_shape = amplitudes.shape
-        flattened_shape = (-1, original_shape[-1])  # n_voxels x n_trials
-        amplitudes = np.reshape(amplitudes, flattened_shape)
-        amplitudes = amplitudes[selected_ids, :]
-    return amplitudes
+    if rsq_threshold is not None:
+        selected_ids = r2 > rsq_threshold * 100
+    else:
+        selected_ids = ~np.isnan(amplitudes)
+
+    return amplitudes[selected_ids, :]
 
 
 def create_design_matrix(motion_energy, n_trials, subject, session):
@@ -62,12 +57,12 @@ def create_design_matrix(motion_energy, n_trials, subject, session):
         source_video_idx = int(trial_label[:4])-1
         design_matrix[trial_idx, :] = motion_energy[source_video_idx, :]
 
-    np.save(DIR_DERIVATIVES /
+    np.save(DIR_DERIVATIVES / 'prf_fits' /
             f'sub-{subject}_ses-{session}_design_matrix_fracridge.npy', design_matrix)
     return design_matrix
 
 
-def z_score(array, axis=0):
+def z_score(array, axis):
     mean = np.nanmean(array, axis=axis, keepdims=True)
     std = np.nanstd(array, axis=axis, keepdims=True)
     return (array - mean) / std
@@ -90,7 +85,7 @@ def save_model(model, subject, session, condition):
     np.save(path / 'alphas.npy', model.alpha_)
 
 
-def run_fracridge(subject, session, threshold, cv):
+def run_fracridge(subject, session, rsq_threshold, cv):
     motion_energy = load_motion_energy()
     r2 = load_r2(subject)
 
@@ -101,12 +96,16 @@ def run_fracridge(subject, session, threshold, cv):
         print(f'Shapes before transformations - motion energy: {motion_energy.shape} and amplitudes: {amplitudes.shape}'
               )
 
-        amplitudes = select_voxels(amplitudes, r2, threshold=threshold)
+        amplitudes = select_voxels(amplitudes, r2, rsq_threshold=rsq_threshold)
+        amplitudes = amplitudes.T  # n_trials x n_voxels
 
         design_matrix = create_design_matrix(
-            motion_energy, amplitudes.shape[1], subject, session)
-        design_matrix, amplitudes = z_score(
-            design_matrix), z_score(amplitudes.T)
+            motion_energy, amplitudes.shape[0], subject, session)
+        # design_matrix[design_matrix < 0] = 0
+
+        # standardize features
+        design_matrix = z_score(design_matrix, axis=0)
+        amplitudes = z_score(amplitudes, axis=0)
 
         print(f"Shapes after transformations - design: {design_matrix.shape}, amplitudes: {amplitudes.shape}"
               )
@@ -128,9 +127,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     subject = str(args.subject).zfill(3)
 
-    threshold = core_settings['fracridge']['threshold']
+    rsq_threshold = core_settings['fracridge']['rsq_threshold']
     cv = core_settings['fracridge']['cv']
 
     for session in range(1, 6):
         session = str(session).zfill(2)
-        run_fracridge(subject, session, threshold, cv)
+        run_fracridge(subject, session, rsq_threshold, cv)
