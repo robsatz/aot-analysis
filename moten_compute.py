@@ -19,11 +19,11 @@ def compute_motion_energy(pyramid, input_filename, output_filename):
     return features
 
 
-def get_video_average(pyramid, video_filename):
+def get_video_average(pyramid, video_filename, recompute):
     video_condition, _ = os.path.splitext(video_filename)  # e.g. 0001_fw
     video_features_filename = DIR_MOTION_ENERGY / \
         'video_features' / (video_condition + '.npy')
-    if os.path.exists(video_filename) and not args.recompute:
+    if os.path.exists(video_features_filename) and not recompute:
         print(f'Loading existing features for video {video_condition}')
         video_features = np.load(video_features_filename)
     else:
@@ -47,12 +47,12 @@ FPS = core_settings['motion_energy']['fps']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-re", "--recompute", action=argparse.BooleanOptionalAction,
+    parser.add_argument("-re", "--recompute", action="store_true", default=False,
                         help="Recompute features.")
     args = parser.parse_args()
 
     os.makedirs(DIR_MOTION_ENERGY_VIDEO_FEATURES, exist_ok=True)
-    video_files = os.listdir(DIR_STIMULI)
+    video_files = sorted(os.listdir(DIR_STIMULI))
 
     pyramid = moten.get_default_pyramid(vhsize=SIZE, fps=FPS)
     with open(DIR_MOTION_ENERGY / 'pyramid.pkl', 'wb') as f:
@@ -63,7 +63,8 @@ if __name__ == '__main__':
 
     for i, video_file in enumerate(video_files):
         print(f'Processing video {video_file} ({i+1}/{len(video_files)})')
-        video_idx, video_avg = get_video_average(pyramid, video_file)
+        video_idx, video_avg = get_video_average(
+            pyramid, video_file, args.recompute)
         features[video_idx, :] = video_avg
 
     # save features for all videos
