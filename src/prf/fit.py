@@ -9,6 +9,8 @@ import numpy as np
 import nibabel as nib
 import argparse
 import nibabel as nib
+from copy import deepcopy
+import os
 
 
 def load_data(subject):
@@ -25,36 +27,31 @@ def load_data(subject):
     return data, design_matrix
 
 
-# def select_voxels(data, subject):
-#     subject = str(subject).zfill(3)
-#     glmsingle_results = nib.load(
-#         f'derivatives/sub-{subject}/GLMsingle_analysis/sub-{subject}_R2_aot_mean.nii.gz')
-#     r2 = glmsingle_results.get_fdata().flatten()
-#     best_voxel = np.nanargmax(r2)
-#     best_voxel, r2[best_voxel]
-
-#     # get all timepoints for selected voxel
-#     data = data.reshape(-1, data.shape[-1])[best_voxel]
-
-#     # need to preserve first dimension for prfpy
-#     return data[np.newaxis, :]
-
 def select_voxels(data, n_slices, slice_nr, subject):
 
     # flatten to n_voxels x n_timepoints
     data = data.reshape(-1, data.shape[-1])
+    print('Data shape at import:', data.shape)
 
-    # get all timepoints for selected voxels
+    # filter nan values
+    brain_mask = ~np.isnan(data).all(axis=1)
+    print(brain_mask.shape)
+    brain_vertices = np.where(brain_mask)[0]
+    print('Number of valid vertices:', brain_vertices.shape)
+
+    # get slice
+    slice_vertices = np.array_split(brain_vertices, n_slices, axis=0)[slice_nr]
+    data = data[slice_vertices]
+    print('Shape of slice:', data.shape)
+
+    # save vertices
     subject = str(subject).zfill(3)
-    selected_indices = np.array_split(data, n_slices)[slice_nr]
-    print(selected_indices.shape)
-    out_path = DIR_DERIVATIVES / f'sub-{subject}' / 'prf_fits'
-    np.save(out_path /
-            f'sub-{subject}_slice-{str(slice_nr).zfill(4)}_vertices.npy', selected_indices)
+    out_path = DIR_DERIVATIVES / f'sub-{subject}' / 'prf_slices'
+    os.makedirs(out_path, exist_ok=True)
+    np.save(
+        out_path / f'vertices_slice_{str(slice_nr).zfill(4)}.npy', slice_vertices)
 
-    # need to preserve first dimension for prfpy
-    # return data[np.newaxis, :]
-    return data[selected_indices, :]
+    return data
 
 
 def create_stimulus(design_matrix, params):
@@ -118,30 +115,27 @@ def define_search_space_norm(stim, params):
         'surround_baseline_grid': params['fit']['norm']['surround_baseline_grid'],
         'n_batches': n_jobs,
         'rsq_threshold': params['fit']['rsq_threshold'],
-        'fixed_grid_baseline': params['fit']['norm']['fixed_grid_baseline'],
+        'fixed_grid_baseline': params['fit']['grid']['fixed_grid_baseline'],
         'grid_bounds': [tuple(params['fit']['amplitude']['prf_ampl_norm']), tuple(params['fit']['norm']['neural_baseline_bound'])],
         'verbose': True
     }
 
-    bounds = [
-        (-1.5*max_ecc_size, 1.5*max_ecc_size),  # x
-        (-1.5*max_ecc_size, 1.5*max_ecc_size),  # y
-        (0.2, 1.5*screen_size),  # prf size
-        tuple(params['fit']['amplitude']['prf_ampl_norm']),  # prf amplitude
-        # bold baseline SHOULD THIS BE 0 OR 1000?
-        tuple(params['fit']['amplitude']['bold_bsl']),
-        # surround amplitude
-        tuple(params['fit']['norm']['surround_amplitude_bound']),
-        tuple(params['fit']['norm']['surround_size_bound']
-              [0], 3*screen_size),  # surround size
-        # neural baseline
-        tuple(params['fit']['norm']['neural_baseline_bound']),
-        # surround baseline
-        tuple(params['fit']['norm']['surround_baseline_bound']),
-        # hrf derivative
-        tuple(params['fit']['hrf']['deriv_bound']),
-        tuple(params['fit']['hrf']['disp_bound'])  # hrf dispersion
-    ]
+    bounds = [(-1.5*max_ecc_size, 1.5*max_ecc_size),  # x
+              (-1.5*max_ecc_size, 1.5*max_ecc_size),  # y
+              (0.2, 1.5*screen_size),  # prf size
+              tuple(params['fit']['amplitude']
+                    ['prf_ampl_norm']),  # prf amplitude
+              # bold baseline SHOULD THIS BE 0 OR 1000?
+              tuple(params['fit']['amplitude']['bold_bsl']),
+              # surround amplitude
+              tuple(params['fit']['norm']['surround_amplitude_bound']),
+              (0.1, 3*screen_size),  # surround size
+              # neural baseline
+              tuple(params['fit']['norm']['neural_baseline_bound']),
+              tuple([float(item) for item in params['fit']['norm']
+                     ['surround_baseline_bound']]),  # surround baseline
+              tuple(params['fit']['hrf']['deriv_bound']),  # hrf derivative
+              tuple(params['fit']['hrf']['disp_bound'])]  # hrf dispersion
 
     iterative_fit_params = {
         'rsq_threshold': params['fit']['rsq_threshold'],
@@ -169,34 +163,22 @@ def gauss_fit(logger, data, stim, n_jobs, params):
     logger.iterative_fit(iterative_fit_params)
 
 
-# def select_filters(logger, data, stim, params, gauss_fitter):
-#     norm_grid = np.nan_to_num(norm_fitter.gridsearch_params)
-#     nr = np.sum(norm_grid[:, -1] > rsq_threshold)
-#     return
+def norm_fit(logger, data, stim, n_jobs, params):
+    grid_fit_params, iterative_fit_params = define_search_space_norm(
+        stim, params)
+    norm_model = model.Norm_Iso2DGaussianModel(
+        stimulus=stim,
+        hrf=params['fit']['hrf']['default']
+    )
+    norm_fitter = fit.Norm_Iso2DGaussianFitter(
+        data=data,
+        model=norm_model,
+        n_jobs=n_jobs,
+        previous_gaussian_fitter=deepcopy(logger.fitter),
+        use_previous_gaussian_fitter_hrf=params['fit']['norm']['use_previous_gaussian_fitter_hrf']
+    )
 
-
-# def norm_fit(logger, data, stim, params):
-#     grid_fit_params, iterative_fit_params = define_search_space_norm(
-#         stim, params)
-#     norm_model = model.Norm_Iso2DGaussianModel(
-#         stimulus=stim,
-#         hrf=params['hrf']['default'],
-#         filter_predictions=filter_predictions,
-#         filter_type=filter_type,
-#         filter_params=filter_params,
-#         normalize_RFs=normalize_RFs,
-#         hrf_basis=hrf_basis,
-#         normalize_hrf=normalize_hrf
-#     )
-#     norm_fitter = fit.Norm_Iso2DGaussianFitter(
-#         data=data,
-#         model=norm_model,
-#         n_jobs=n_jobs,
-#         previous_gaussian_fitter=deepcopy(logger.fitter),
-#         use_previous_gaussian_fitter_hrf=use_previous_gaussian_fitter_hrf
-#     )
-
-    logger.attach_fitter('norm', gauss_fitter)
+    logger.attach_fitter('norm', norm_fitter)
     # runs grid search while logging to file
     logger.grid_fit(
         grid_fit_params, params['fit']['rsq_threshold'], params['fit']['filter_positive'])
@@ -204,19 +186,19 @@ def gauss_fit(logger, data, stim, n_jobs, params):
     logger.iterative_fit(iterative_fit_params)
 
 
-def fit_prfs(subject, slice_nr, n_jobs, params):
+def fit_prfs(subject, n_slices, slice_nr, n_jobs, params):
     data, design_matrix = load_data(subject)
-    data = select_voxels(data, subject)
+    data = select_voxels(data, n_slices, slice_nr, subject)
     stim = create_stimulus(design_matrix, params)
 
-    logger = FitLogger(subject)
+    logger = FitLogger(subject, slice_nr)
     gauss_fit(logger, data, stim, n_jobs, params)
-    # threshold_filters(logger, data, stim, params)
-    # # apply DN model using search results from gaussian fit
-    # norm_fit(logger, data, stim, params)
+    if params['fit']['filter_positive']:
+        logger.filter_positive_prfs()
+    # apply DN model using search results from gaussian fit
+    norm_fit(logger, data, stim, n_jobs, params)
 
 
-# TODO: Batch data
 config = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
 params = config['prf']
 
@@ -232,14 +214,17 @@ if __name__ == '__main__':
     parser.add_argument("-sub", "--subject", type=int, default=1,
                         help="Subject number.")
     parser.add_argument(
-        "-slice", "--slice_nr", type=int, default=1)
+        "-slice", "--slice_nr", type=int, default=0)
     parser.add_argument(
-        "-n_jobs", "--n_jobs", type=int, default=2)
+        "--n_slices", type=int, default=1)
+    parser.add_argument(
+        "--n_jobs", type=int, default=2)
     args = parser.parse_args()
 
     subject = args.subject
+    n_slices = args.n_slices
     slice_nr = args.slice_nr
     n_jobs = args.n_jobs
 
     fit_prfs(
-        subject, slice_nr, n_jobs, params)
+        subject, n_slices, slice_nr, n_jobs, params)

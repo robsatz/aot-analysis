@@ -43,9 +43,6 @@ def concat_slices(data, subject):
     return data
 
 
-subject = 2
-n_slices = 1000
-
 config = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
 params = config['prf']
 

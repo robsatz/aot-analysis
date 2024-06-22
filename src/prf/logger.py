@@ -9,14 +9,18 @@ from pathlib import Path
 
 
 class FitLogger():
-    def __init__(self, subject, loglevel='DEBUG'):
+    def __init__(self, subject, slice_nr, loglevel='INFO'):
 
         self.subject = str(subject).zfill(3)
+        self.slice_nr = str(slice_nr).zfill(5)
         self.fitter = None
 
         # prepare output dir
-        self.out_path = DIR_DERIVATIVES / f'sub-{self.subject}' / 'prf_fits'
-        os.makedirs(self.out_path, exist_ok=True)
+        self.results_path = DIR_DERIVATIVES / \
+            f'sub-{self.subject}' / 'prf_fits'
+        os.makedirs(self.results_path, exist_ok=True)
+        self.log_path = DIR_DERIVATIVES / f'sub-{self.subject}' / 'logs'
+        os.makedirs(self.log_path, exist_ok=True)
 
         # setup logger
         self.logger = self._create_logger(loglevel)
@@ -27,7 +31,7 @@ class FitLogger():
         # setup to write logs to file
         current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         file_handler = logging.FileHandler(
-            self.out_path / f'PRF_{current_time}.log')
+            self.log_path / f'PRF_{current_time}.log')
         file_handler.setLevel(loglevel)
         # setup specific logging format
         formatter = logging.Formatter(
@@ -80,12 +84,18 @@ class FitLogger():
         self.save_results(
             'iter', self.fitter.iterative_search_params, self.fitter.rsq_mask)
 
+    def filter_positive_prfs(self):
+        self.fitter.iterative_search_params[self.fitter.iterative_search_params[:, 3] < 0] = 0.0
+
     def save_results(self, stage, search_params, mask):
         search_results = np.nan_to_num(search_params)
         mean_rsq = np.mean(search_results[mask, -1])
-        self.logger.info(f'Mean rsq: {mean_rsq}')
+        self.logger.info(f'STAGE COMPLETED: {stage}')
+        self.logger.info(f'---- mean rsq: {mean_rsq}')
+        self.logger.info(
+            f'---- n_voxels > rsq_threshold: {mask.sum()} / {len(mask)} = {mask.sum()/len(mask)}')
         np.save(
-            self.out_path / f'sub-{self.subject}_{self.name}_{stage}_fit.npy', search_results)
+            self.results_path / f'sub-{self.subject}_{self.slice_nr}_{self.name}_{stage}_fit.npy', search_results)
 
 
 config = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
