@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 from scipy.ndimage import zoom
-import prf_utils
+import src.prf.utils as utils
 
 
 def load_data(subject, run):
@@ -109,7 +109,7 @@ def create_timepoints(experiment_events, aperture_events, tr):
     # forward fill bar_direction
     timepoints.loc[:,
                    'bar_direction_min'] = timepoints['bar_direction_min'].ffill()
-    prf_utils.test_alignment(timepoints)
+    utils.test_alignment(timepoints)
     return timepoints
 
 
@@ -169,8 +169,8 @@ def create_subject_design_matrices(subject, tr_canonical, tr_output, vhsize_cano
         design_matrix_output = resize(design_matrix_output, vhsize_output)
         save_design_matrix(design_matrix_output, 'output', subject, run)
 
-        prf_utils.create_gif(design_matrix_output,
-                             tr_output / gif_speed, 'output', subject, run)
+        utils.create_gif(design_matrix_output,
+                         tr_output / gif_speed, 'output', subject, run)
 
         dms.append(design_matrix_output)
     return dms

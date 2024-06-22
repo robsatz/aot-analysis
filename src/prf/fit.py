@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as pl
 from prfpy import stimulus, model, fit
-from prf_logger import FitLogger
+from src.prf.logger import FitLogger
 import yaml
 from pathlib import Path
 import numpy as np

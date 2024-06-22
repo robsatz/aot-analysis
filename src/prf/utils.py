@@ -1,13 +1,8 @@
-import h5py
 import yaml
 from pathlib import Path
-import os
-import pandas as pd
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
-from scipy.ndimage import zoom
 
 
 def test_alignment(timepoints):

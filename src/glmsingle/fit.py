@@ -1,10 +1,8 @@
 import os
-import numpy as np
 from pathlib import Path
 from GLMsingle.glmsingle import GLM_single
-import nibabel as nib
 import argparse
-from glmsingle_create_design_matrix import create_session_design_matrices
+from src.glmsingle.design_matrix import create_session_design_matrices
 from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_for_one_session
 import yaml
 import copy
