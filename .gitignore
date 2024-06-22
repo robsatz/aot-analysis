@@ -159,24 +159,14 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# dependencies
-arrow_of_time_experiment/
-GLMsingle/
-patch-denoising/
-preprocessing/
-pymoten/
-prfpy/
-snellius/
-
 # data/sub-projects
-derivatives/
-motion_energy_features/
-results/
-semantics/
-laminar_analyses/
+lib/
+data/
+stash/
+
+# notebooks
 *.ipynb
 
 # misc
 .vscode/
-bids_data/
 

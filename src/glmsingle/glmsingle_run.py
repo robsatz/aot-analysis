@@ -28,6 +28,7 @@ def run_glmsingle(subject, session, data_params, model_params, fit_params):
         print(model_params, fit_params)
 
         # copy avoids overwriting
+        print(design_aot[0].shape)
         glm = GLM_single(copy.deepcopy(model_params))
         glm.fit(design=design, data=bold_data, stimdur=fit_params['stimdur'], tr=fit_params['tr'], outputdir=str(
             output_dir), figuredir=str(output_dir))
