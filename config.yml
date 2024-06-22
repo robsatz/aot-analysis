@@ -27,8 +27,10 @@ prf:
     tr_output: .9  # data tr
     gif_speed: 100  # real-time = 1
   fit:
+    n_slices: 1000
+
     # criteria for selecting grid filters
-    rsq_threshold: .3
+    rsq_threshold: .1
     filter_positive: True
 
     # fitting tolerance
@@ -68,13 +70,13 @@ prf:
 paths:
   stimuli: '/tank/shared/2024/visual/AOT/derivatives/stimuli/rescaled_final'
   data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc_forcesyn'
-  motion_energy: './motion_energy_features'
-  derivatives: './derivatives'
+  motion_energy: './data/motion_energy_features'
+  derivatives: './data/derivatives'
   aot_experiment:
-    base: './arrow_of_time_experiment'
+    base: './lib/arrow_of_time_experiment'
     settings: 'aot/data/experiment/settings/main'
   prf_experiment:
-    base: './prf_experiment'
+    base: './lib/prf_experiment'
     input: 'logs'
     design: 'stimuli'
     bold: '/tank/shared/2024/visual/AOT/temp/prftest/psc_average/'
