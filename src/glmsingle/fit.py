@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from GLMsingle.glmsingle import GLM_single
+from glmsingle import GLM_single
 import argparse
 from src.glmsingle.design_matrix import create_session_design_matrices
 from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_for_one_session

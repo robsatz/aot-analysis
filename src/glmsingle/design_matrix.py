@@ -150,11 +150,12 @@ def create_subject_design_matrices(subject):
 
 BLANK = -1  # encoding of blank trials
 
-DIR_BASE = Path('arrow_of_time_experiment/aot')
-DIR_EXPERIMENT = DIR_BASE / 'experiment'
-DIR_VIDEOS = DIR_BASE / 'data/videos'
-DIR_SETTINGS = DIR_BASE / 'data/experiment/settings/main'
-DIR_OUTPUT = Path('./derivatives')
+config = yaml.load(open('./config.yml'), Loader=yaml.FullLoader)
+DIR_BASE = Path(config['paths']['aot_experiment']['base'])
+DIR_EXPERIMENT = DIR_BASE / 'aot/experiment'
+DIR_VIDEOS = DIR_BASE / 'aot/data/videos'
+DIR_SETTINGS = DIR_BASE / 'aot/data/experiment/settings/main'
+DIR_OUTPUT = Path(config['paths']['derivatives'])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
