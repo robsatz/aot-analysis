@@ -76,7 +76,7 @@ def compute_subject_aggregates(subject):
     subject = str(subject).zfill(3)
     bold_filename, bold_header, bold_img = load_bold(subject)
     results = {}
-    for session in range(1, 6):
+    for session in range(1, 11):
         session = str(session).zfill(2)
         try:
             session_results = compute_session_aggregates(
