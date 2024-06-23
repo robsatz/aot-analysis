@@ -57,8 +57,8 @@ def create_design_matrix(motion_energy, n_trials, subject, session):
         source_video_idx = int(trial_label[:4])-1
         design_matrix[trial_idx, :] = motion_energy[source_video_idx, :]
 
-    np.save(DIR_DERIVATIVES / 'prf_fits' /
-            f'sub-{subject}_ses-{session}_design_matrix_fracridge.npy', design_matrix)
+    np.save(DIR_DERIVATIVES / f'sub-{subject}' / f'ses-{session}' /
+            f'sub-{subject}_ses-{session}_motion_energy_design_matrix.npy', design_matrix)
     return design_matrix
 
 
