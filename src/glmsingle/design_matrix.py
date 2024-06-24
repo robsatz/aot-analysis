@@ -4,6 +4,8 @@ from pathlib import Path
 import yaml
 import argparse
 
+from src import io_utils
+
 
 def get_tr_sequence(subject, session, run, shift=0):
     tr_sequence = yaml.load(open(
@@ -80,12 +82,9 @@ def create_run_design_matrices(tr_sequence, n_features, prior_videos):
     return design_matrix_aot, design_matrix_control, prior_videos
 
 
-def create_session_design_matrices(subject, session):
+def create_session_design_matrices(subject, session, n_features):
     exp_settings = yaml.load(
         open(DIR_EXPERIMENT / 'core_exp_settings.yml'), Loader=yaml.FullLoader)
-    analysis_settings = yaml.load(
-        open('./config.yml'), Loader=yaml.FullLoader)
-    n_features = analysis_settings['glmsingle']['design_matrix']['n_features']
 
     design_matrices_aot = []
     design_matrices_control = []
@@ -142,15 +141,15 @@ def create_session_design_matrices(subject, session):
     return design_matrices_aot, design_matrices_control
 
 
-def create_subject_design_matrices(subject):
+def create_subject_design_matrices(subject, n_features):
     for session_idx in range(10):
         session = str(session_idx + 1).zfill(2)
-        create_session_design_matrices(subject, session)
+        create_session_design_matrices(subject, session, n_features)
 
 
 BLANK = -1  # encoding of blank trials
 
-config = yaml.load(open('./config.yml'), Loader=yaml.FullLoader)
+config = io_utils.load_config()
 DIR_BASE = Path(config['paths']['aot_experiment']['base'])
 DIR_EXPERIMENT = DIR_BASE / 'aot/experiment'
 DIR_VIDEOS = DIR_BASE / 'aot/data/videos'
@@ -163,4 +162,5 @@ if __name__ == '__main__':
                         help="Subject number.")
     args = parser.parse_args()
     subject = str(args.subject).zfill(2)
-    create_subject_design_matrices(subject)
+    n_features = config['glmsingle']['design_matrix']['n_features']
+    create_subject_design_matrices(subject, n_features)

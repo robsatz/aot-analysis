@@ -7,6 +7,8 @@ import numpy as np
 import yaml
 import os
 
+from src import io_utils
+
 
 def compute_motion_energy(pyramid, input_filename, output_filename):
     luminance_images = moten.io.video2luminance(
@@ -37,7 +39,7 @@ def get_video_average(pyramid, video_filename, recompute):
     return video_idx, video_avg
 
 
-core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+core_settings = io_utils.load_config()
 DIR_STIMULI = Path(core_settings['paths']['stimuli'])
 DIR_BASE = Path('.')
 DIR_MOTION_ENERGY = DIR_BASE / core_settings['paths']['motion_energy']

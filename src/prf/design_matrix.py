@@ -1,14 +1,12 @@
 import h5py
-import yaml
 from pathlib import Path
-import os
 import pandas as pd
-import imageio
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
 from scipy.ndimage import zoom
+
 import src.prf.utils as utils
+from src import io_utils
 
 
 def load_data(subject, run):
@@ -176,7 +174,7 @@ def create_subject_design_matrices(subject, tr_canonical, tr_output, vhsize_cano
     return dms
 
 
-core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+core_settings = io_utils.load_config()
 params = core_settings['prf']['design_matrix']
 DIR_BASE = Path(core_settings['paths']['prf_experiment']['base'])
 DIR_INPUT = DIR_BASE / core_settings['paths']['prf_experiment']['input']

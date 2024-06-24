@@ -4,17 +4,18 @@ from glmsingle import GLM_single
 import argparse
 from src.glmsingle.design_matrix import create_session_design_matrices
 from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_for_one_session
-import yaml
 import copy
 
+from src import io_utils
 
-def run_glmsingle(subject, session, data_params, model_params, fit_params):
+
+def run_glmsingle(subject, session, data_params, model_params, fit_params, n_features):
 
     bold_data = construct_bold_for_one_session(
         subject, session, data_params['datatype'], data_params['nordictype'])
 
     design_aot, design_control = create_session_design_matrices(
-        subject, session)
+        subject, session, n_features)
     designs = {'control': design_control, 'aot': design_aot}
 
     for label, design in designs.items():
@@ -32,7 +33,7 @@ def run_glmsingle(subject, session, data_params, model_params, fit_params):
             output_dir), figuredir=str(output_dir))
 
 
-core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+core_settings = io_utils.load_config()
 DIR_OUTPUT = Path(core_settings['paths']['derivatives'])
 
 if __name__ == '__main__':
@@ -49,5 +50,6 @@ if __name__ == '__main__':
     run_glmsingle(subject, session,
                   data_params=glmsingle_settings['data'],
                   model_params=glmsingle_settings['model'],
-                  fit_params=glmsingle_settings['fit']
+                  fit_params=glmsingle_settings['fit'],
+                  n_features=glmsingle_settings['design_matrix']['n_features']
                   )

@@ -3,8 +3,8 @@ import numpy as np
 from pathlib import Path
 import nibabel as nib
 import argparse
-import yaml
-import copy
+
+from src import io_utils
 
 
 def load_bold(subject):
@@ -95,7 +95,7 @@ def compute_subject_aggregates(subject):
                 bold_filename=bold_filename, bold_img=bold_img)
 
 
-core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+core_settings = io_utils.load_config()
 DIR_DATA = Path(core_settings['paths']['data'])
 DIR_DERIVATIVES = Path(core_settings['paths']['derivatives'])
 

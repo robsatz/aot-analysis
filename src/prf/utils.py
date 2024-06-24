@@ -1,8 +1,9 @@
-import yaml
 from pathlib import Path
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
+
+from src import io_utils
 
 
 def test_alignment(timepoints):
@@ -47,7 +48,7 @@ def create_gif(design_matrix, tr, label, subject, run):
     print(f"Saved GIF: {gif_filename}")
 
 
-core_settings = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+core_settings = io_utils.load_config()
 params = core_settings['prf']['design_matrix']
 DIR_BASE = Path(core_settings['paths']['prf_experiment']['base'])
 DIR_INPUT = DIR_BASE / core_settings['paths']['prf_experiment']['input']
