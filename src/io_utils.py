@@ -11,31 +11,33 @@ def load_config():
         return yaml.safe_load(file)
 
 
-def load_metadata(subject, session=1, task='AOT_rec-nordicstc', run=1):
+def load_metadata(subject, metadata_path=None, session=1, task='AOT_rec-nordicstc', run=1):
     subject = str(subject).zfill(3)
-    session = str(session).zfill(2)
+    if type(session) == int:
+        session = str(session).zfill(2)
     task = str(task).zfill(2)
     run = str(run)
-    filename = f'sub-{subject}_'\
-        + f'ses-{session}_' \
-        + f'task-{task}_' \
-        + f'run-{run}_' \
-        + 'space-T1w_part-mag_boldref.nii.gz'
-    filepath = DIR_DATA \
-        / f'sub-{subject}' \
-        / f'ses-01' \
-        / 'func' \
-        / filename
-    nifti_image = nib.load(filepath)
+    if not metadata_path:
+        filename = f'sub-{subject}_'\
+            + f'ses-{session}_' \
+            + f'task-{task}_' \
+            + f'run-{run}_' \
+            + 'space-T1w_part-mag_boldref.nii.gz'
+        metadata_path = DIR_DATA \
+            / f'sub-{subject}' \
+            / f'ses-01' \
+            / 'func' \
+            / filename
+    nifti_image = nib.load(metadata_path)
     return nifti_image.header, nifti_image.affine
 
 
-def save_nifti(data, filepath, subject, **kwargs):
+def save_nifti(data, out_path, subject, **kwargs):
     header, affine = load_metadata(subject, **kwargs)
     nifti_image = nib.Nifti1Image(data, header=header, affine=affine)
-    nifti_image.to_filename(filepath)
+    nifti_image.to_filename(out_path)
 
-    print(f'Nifti saved to: {filepath}')
+    print(f'Nifti saved to: {out_path}')
 
 
 config = load_config()

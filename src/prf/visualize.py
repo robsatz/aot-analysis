@@ -66,6 +66,8 @@ def save_csv(params, out_path):
 
 
 def save_params(params_dict, volume_shape, subject):
+    # specifying file containing affine transform/header metadata
+    metadata_path = DIR_DATA / f'sub-{str(subject).zfill(3)}_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz'
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / 'prf_analysis'
     os.makedirs(out_path, exist_ok=True)
@@ -81,7 +83,8 @@ def save_params(params_dict, volume_shape, subject):
                 io_utils.save_nifti(
                     param_volume,
                     out_path / f'{filename_base}_{param}.nii.gz',
-                    subject)
+                    subject,
+                    metadata_path=metadata_path)
 
 
 config = io_utils.load_config()
