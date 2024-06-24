@@ -1,50 +1,90 @@
 import os
 import numpy as np
+import pandas as pd
 from pathlib import Path
 import argparse
-import yaml
+from copy import deepcopy
+from src.prf.parameters import Parameters
+from src import io_utils
+from src.prf import fit as prf_fit
 
 
-def select_voxels(data, n_slices, slice_nr, subject):
+def load_vertices(slice_nr, subject):
+    try:
+        return np.load(DIR_DERIVATIVES / f'sub-{str(subject).zfill(3)}' / 'prf_slices' /
+                       f'vertices_slice_{str(slice_nr).zfill(4)}.npy')
+    except FileNotFoundError:
+        print(f'Slice vertices not found for slice {slice_nr}', flush=True)
 
-    # flatten to n_voxels x n_timepoints
-    data = data.reshape(-1, data.shape[-1])
-    print('Data shape at import:', data.shape)
 
-    # filter nan values
-    brain_mask = ~np.isnan(data).all(axis=1)
-    print(brain_mask.shape)
-    brain_vertices = np.where(brain_mask)[0]
-    print('Number of valid vertices:', brain_vertices.shape)
+def load_params(model_type, search_type, slice_nr, subject):
+    try:
+        return np.load(
+            DIR_DERIVATIVES / f'sub-{str(subject).zfill(3)}' / 'prf_fits' / f'sub-{str(subject).zfill(3)}_{str(slice_nr).zfill(5)}_{model_type}_{search_type}_fit.npy')
+    except FileNotFoundError:
+        print(
+            f'Params not found for {model_type}_{search_type}_fit, slice {slice_nr}', flush=True)
+        return False
 
-    # get slice
-    slice_vertices = np.array_split(brain_vertices, n_slices, axis=0)[slice_nr]
-    data = data[slice_vertices]
-    print('Shape of slice:', data.shape)
+    # norm_iter_params = np.load(DIR_DERIVATIVES / 'prf_fits' / f'sub-002_{str(i).zfill(5)}_norm_iter_fit.npy')
+    # norm_iter_fit[vertices] = norm_iter_params
 
-    # save vertices
-    subject = str(subject).zfill(3)
-    out_path = DIR_DERIVATIVES / f'sub-{subject}' / 'prf_slices'
+
+def concat_slices(n_voxels, n_slices, subject):
+    # initialize empty arrays
+    placeholder = np.empty((n_voxels, 12))
+    placeholder.fill(np.nan)
+
+    gauss_params = placeholder[:, :8]
+    norm_params = placeholder[:, :]
+
+    params_dict = {
+        'gauss': {
+            'grid': deepcopy(gauss_params),
+            'iter': deepcopy(gauss_params)
+        },
+        'norm': {
+            'grid': deepcopy(norm_params),
+            'iter': deepcopy(norm_params)}}
+
+    # retrieve params
+    for slice_nr in range(n_slices):
+        vertices = load_vertices(slice_nr, subject)
+        if vertices is None:
+            continue
+        for model in params_dict.keys():
+            for search in params_dict[model].keys():
+                params_dict[model][search][vertices] = load_params(
+                    model, search, slice_nr, subject)
+
+    return params_dict
+
+
+def save_csv(params, out_path):
+    params.to_csv(out_path)
+    print(f'CSV saved to {out_path}', flush=True)
+
+
+def save_params(params_dict, volume_shape, subject):
+    out_path = DIR_DERIVATIVES / \
+        f'sub-{str(subject).zfill(3)}' / 'prf_analysis'
     os.makedirs(out_path, exist_ok=True)
-    np.save(
-        out_path / f'vertices_slice_{str(slice_nr).zfill(4)}.npy', slice_vertices)
 
-    return data
-
-
-def concat_slices(data, subject):
-    subject = str(subject).zfill(3)
-    out_path = DIR_DERIVATIVES / f'sub-{subject}' / 'prf_slices'
-    slices = [f for f in os.listdir(out_path) if f.endswith('.npy')]
-    slices.sort()
-    print(slices)
-    data = np.concatenate([np.load(out_path / f) for f in slices], axis=0)
-    print('Data shape after concatenation:', data.shape)
-    return data
+    for model in params_dict.keys():
+        for search in params_dict[model].keys():
+            filename_base = f'sub-{str(subject).zfill(3)}_{model}_{search}_fit'
+            params = Parameters(
+                params_dict[model][search], model=model).to_df()
+            save_csv(params, out_path / f'{filename_base}.csv')
+            for param in params.columns:
+                param_volume = params[param].values.reshape(volume_shape)
+                io_utils.save_nifti(
+                    param_volume,
+                    out_path / f'{filename_base}_{param}.nii.gz',
+                    subject)
 
 
-config = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
-params = config['prf']
+config = io_utils.load_config()
 
 DIR_DERIVATIVES = Path(config['paths']['derivatives'])
 
@@ -57,15 +97,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-sub", "--subject", type=int, default=1,
                         help="Subject number.")
-    parser.add_argument(
-        "-slice", "--slice_nr", type=int, default=1)
-    parser.add_argument(
-        "-n_jobs", "--n_jobs", type=int, default=2)
     args = parser.parse_args()
 
     subject = args.subject
-    slice_nr = args.slice_nr
-    n_jobs = args.n_jobs
+    n_slices = config['prf']['fit']['n_slices']
 
-    concat_slices(
-        subject, slice_nr, n_jobs, params)
+    # retrieve volumetric shape for initialization of arrays
+    data, _ = prf_fit.load_data(subject)
+    volume_shape = data.shape[:3]
+    n_voxels = volume_shape[0] * volume_shape[1] * volume_shape[2]
+
+    params_dict = concat_slices(
+        n_voxels, n_slices, subject)
+
+    save_params(params_dict, volume_shape, subject)
