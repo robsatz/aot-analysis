@@ -2,7 +2,6 @@
 import numpy as np
 import matplotlib.pyplot as pl
 from prfpy import stimulus, model, fit
-import yaml
 from pathlib import Path
 import numpy as np
 import nibabel as nib
@@ -10,6 +9,9 @@ import argparse
 import nibabel as nib
 from copy import deepcopy
 import os
+
+from src.prf.logger import FitLogger
+from src import io_utils
 
 from src.prf.logger import FitLogger
 from src import io_utils
@@ -201,6 +203,7 @@ def fit_prfs(subject, n_slices, slice_nr, n_jobs, params):
     norm_fit(logger, data, stim, n_jobs, params)
 
 
+config = io_utils.load_config()
 config = io_utils.load_config()
 params = config['prf']
 

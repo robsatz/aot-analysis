@@ -87,6 +87,7 @@ class FitLogger():
             'iter', self.fitter.iterative_search_params, self.fitter.rsq_mask)
 
     def filter_positive_prfs(self):
+        # amplitude is stored at index 3
         self.fitter.iterative_search_params[self.fitter.iterative_search_params[:, 3] < 0] = 0.0
 
     def save_results(self, stage, search_params, mask):
