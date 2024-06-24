@@ -7,6 +7,8 @@ import yaml
 import os
 from pathlib import Path
 
+from src import io_utils
+
 
 class FitLogger():
     def __init__(self, subject, slice_nr, loglevel='INFO'):
@@ -98,5 +100,5 @@ class FitLogger():
             self.results_path / f'sub-{self.subject}_{self.slice_nr}_{self.name}_{stage}_fit.npy', search_results)
 
 
-config = yaml.load(open('config.yml'), Loader=yaml.FullLoader)
+config = io_utils.load_config()
 DIR_DERIVATIVES = Path(config['paths']['derivatives'])

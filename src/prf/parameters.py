@@ -105,7 +105,7 @@ class Parameters():
 
                 if self.params.shape[-1] > 7:
                     params_dict["hrf_deriv"] = self.params[:, -3]
-                    params_dict["hrf_dsip"] = self.params[:, -2]
+                    params_dict["hrf_disp"] = self.params[:, -2]
 
         else:
             raise ValueError(f"Model must be one of {

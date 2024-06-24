@@ -7,7 +7,7 @@ import os
 
 
 def load_config():
-    with open('./config.yml', 'r') as file:
+    with open(DIR_CONFIG / 'config.yml', 'r') as file:
         return yaml.safe_load(file)
 
 
@@ -38,5 +38,6 @@ def save_nifti(data, filepath, subject, **kwargs):
     print(f'Nifti saved to: {filepath}')
 
 
+DIR_CONFIG = Path(__file__).parent.parent
 config = load_config()
 DIR_DATA = Path(config['paths']['data'])
