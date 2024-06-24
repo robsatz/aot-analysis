@@ -18,6 +18,9 @@ motion_energy:
 fracridge:
   rsq_threshold: .8
   cv: 5
+  segmentation: 'aot'  # segmentation of trials in design matrix ('aot' for arrow of time , 'control' for presentation order)
+  aot_condition: 'fw'  # trials to include ('fw' for forward, 'rv' for reverse, null for all trials)
+  n_slices: 100
 prf:
   design_matrix:
     blank: -1
@@ -71,13 +74,13 @@ prf:
 paths:
   stimuli: '/tank/shared/2024/visual/AOT/derivatives/stimuli/rescaled_final'
   data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc_forcesyn'
-  motion_energy: './data/motion_energy_features'
-  derivatives: './data/derivatives'
+  motion_energy: '/tank/rsr341/projects/aot_temporal/data/motion_energy_features'
+  derivatives: '/tank/rsr341/projects/aot_temporal/data/derivatives'
   aot_experiment:
-    base: './lib/arrow_of_time_experiment'
+    base: '/tank/rsr341/projects/aot_temporal/lib/arrow_of_time_experiment'
     settings: 'aot/data/experiment/settings/main'
   prf_experiment:
-    base: './lib/prf_experiment'
+    base: '/tank/rsr341/projects/aot_temporal/lib/prf_experiment'
     input: 'logs'
     design: 'stimuli'
     bold: '/tank/shared/2024/visual/AOT/temp/prftest/psc_average/'
