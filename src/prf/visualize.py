@@ -65,26 +65,54 @@ def save_csv(params, out_path):
     print(f'CSV saved to {out_path}', flush=True)
 
 
-def save_params(params_dict, volume_shape, subject):
+def save_params(params_dict, volume_shape, rsq_threshold, subject):
     # specifying file containing affine transform/header metadata
-    metadata_path = DIR_DATA / f'sub-{str(subject).zfill(3)}_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz'
+    metadata_path = DIR_DATA / \
+        f'sub-{str(subject).zfill(3)}_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz'
     out_path = DIR_DERIVATIVES / \
-        f'sub-{str(subject).zfill(3)}' / 'prf_analysis'
+        f'sub-{str(subject).zfill(3)}' / \
+        'prf_analysis'
     os.makedirs(out_path, exist_ok=True)
 
-    for model in params_dict.keys():
-        for search in params_dict[model].keys():
-            filename_base = f'sub-{str(subject).zfill(3)}_{model}_{search}_fit'
+    filename_base = f'sub-{str(subject).zfill(3)}'
+    placeholder_volume = np.empty(volume_shape)
+    placeholder_volume.fill(np.nan)
+    search_process_by_param = {}
+    # order matters: determines nifti volume order
+    for model in ('gauss', 'norm'):
+        for search in ('grid', 'iter'):
             params = Parameters(
                 params_dict[model][search], model=model).to_df()
-            save_csv(params, out_path / f'{filename_base}.csv')
+            save_csv(params, out_path /
+                     f'{filename_base}_{model}_{search}_fit.csv')
+
+            # create r2 mask for thresholded outputs
+            r2_volume = params['r2'].values.reshape(volume_shape)
+            r2_mask = r2_volume > rsq_threshold
+
+            # iterate over params
             for param in params.columns:
-                param_volume = params[param].values.reshape(volume_shape)
-                io_utils.save_nifti(
-                    param_volume,
-                    out_path / f'{filename_base}_{param}.nii.gz',
-                    subject,
-                    metadata_path=metadata_path)
+                full_volume = params[param].values.reshape(volume_shape)
+                if param != 'r2':
+                    # save rsq-thresholded version
+                    thresh_volume = deepcopy(placeholder_volume)
+                    thresh_volume[r2_mask] = full_volume[r2_mask]
+
+                outputs = [full_volume, thresh_volume]
+                if param not in search_process_by_param:
+                    search_process_by_param[param] = outputs
+                else:
+                    search_process_by_param[param].extend(outputs)
+
+    for param in search_process_by_param.keys():
+        # save nifti as combined volume (showing change throughout search process)
+        search_process = np.stack(
+            search_process_by_param[param], axis=-1)
+        io_utils.save_nifti(
+            search_process,
+            out_path / f'{filename_base}_{param}.nii.gz',
+            subject,
+            metadata_path=metadata_path)
 
 
 config = io_utils.load_config()
@@ -104,6 +132,7 @@ if __name__ == '__main__':
 
     subject = args.subject
     n_slices = config['prf']['fit']['n_slices']
+    rsq_threshold = config['prf']['viz']['rsq_threshold']
 
     # retrieve volumetric shape for initialization of arrays
     data, _ = prf_fit.load_data(subject)
@@ -113,4 +142,4 @@ if __name__ == '__main__':
     params_dict = concat_slices(
         n_voxels, n_slices, subject)
 
-    save_params(params_dict, volume_shape, subject)
+    save_params(params_dict, volume_shape, rsq_threshold, subject)

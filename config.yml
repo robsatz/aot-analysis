@@ -70,6 +70,8 @@ prf:
       neural_baseline_bound: [0,1000]
       surround_baseline_bound: [1e-6,1000]
       use_previous_gaussian_fitter_hrf: False
+  viz:
+    rsq_threshold: .2
 
 paths:
   stimuli: '/tank/shared/2024/visual/AOT/derivatives/stimuli/rescaled_final'
