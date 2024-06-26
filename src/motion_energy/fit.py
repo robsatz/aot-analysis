@@ -109,7 +109,7 @@ def create_design_matrix(motion_energy, trial_labels, subject, session):
     return design_matrix
 
 
-def fit(X, y, cv):
+def fit(X, y, cv, n_jobs):
     pipeline = Pipeline([
         ('scaler', StandardScaler()),  # z-scores motion energy features
         ('fracridge', TransformedTargetRegressor(
@@ -120,7 +120,8 @@ def fit(X, y, cv):
     gridsearch = GridSearchCV(
         pipeline,
         param_grid={'fracridge__regressor__fracs': fracgrid},
-        cv=cv)
+        cv=cv,
+        n_jobs=n_jobs)
     gridsearch.fit(X, y)
     return gridsearch
 
@@ -138,7 +139,7 @@ def save_pipeline(grid_search_obj, subject, segmentation):
             grid_search_obj.best_estimator_.named_steps['fracridge'].regressor_.alpha_)
 
 
-def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold, cv):
+def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold, cv, n_jobs):
 
     motion_energy = load_motion_energy()
     r2 = load_r2(subject)
@@ -152,8 +153,8 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
 
         session_amplitudes = load_amplitudes(subject, session, segmentation)
 
-        print(f'Shapes before transformations - motion energy: {motion_energy.shape} and amplitudes: {session_amplitudes.shape}'
-              )
+        print(f'Shapes before transformations - motion energy: {motion_energy.shape} and amplitudes: {session_amplitudes.shape}',
+              flush=True)
 
         session_amplitudes = select_voxels(
             subject, session_amplitudes, n_slices, slice_nr, r2, rsq_threshold)
@@ -163,11 +164,11 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
         session_design_matrix = create_design_matrix(
             motion_energy, trial_labels, subject, session)
         print('Number of negative motion energy values:',
-              (session_design_matrix < 0).sum())
+              (session_design_matrix < 0).sum(), flush=True)
         # design_matrix[design_matrix < 0] = 0
 
-        print(f"Shapes after transformations - design: {session_design_matrix.shape}, amplitudes: {session_amplitudes.shape}"
-              )
+        print(f"Shapes after transformations - design: {session_design_matrix.shape}, amplitudes: {session_amplitudes.shape}",
+              flush=True)
         subject_amplitudes.append(session_amplitudes)
         subject_design_matrix.append(session_design_matrix)
 
@@ -175,9 +176,11 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
     subject_design_matrix = np.concatenate(subject_design_matrix, axis=0)
 
     print(
-        f'Final shapes - design: {subject_design_matrix.shape}, amplitudes: {subject_amplitudes.shape}')
+        f'Final shapes - design: {subject_design_matrix.shape}',
+        f'amplitudes: {subject_amplitudes.shape}',
+        flush=True)
 
-    gridsearch_obj = fit(subject_design_matrix, subject_amplitudes, cv)
+    gridsearch_obj = fit(subject_design_matrix, subject_amplitudes, cv, n_jobs)
     save_pipeline(gridsearch_obj, subject, segmentation)
 
 
@@ -193,9 +196,12 @@ if __name__ == '__main__':
                         help="Subject number.")
     parser.add_argument("--slice_nr", type=int, default=1,
                         help="Slice number.")
+    parser.add_argument("--n_jobs", type=int, default=1,
+                        help="Number of jobs")
     args = parser.parse_args()
     subject = args.subject
     slice_nr = args.slice_nr
+    n_jobs = args.n_jobs
 
     rsq_threshold = core_settings['fracridge']['rsq_threshold']
     cv = core_settings['fracridge']['cv']
@@ -203,7 +209,6 @@ if __name__ == '__main__':
     aot_condition = core_settings['fracridge']['aot_condition']
     n_slices = core_settings['fracridge']['n_slices']
 
-    for session in range(1, 6):
-        session = str(session).zfill(2)
-        main(subject, n_slices, slice_nr, segmentation,
-             aot_condition, rsq_threshold, cv)
+
+    main(subject, n_slices, slice_nr, segmentation,
+            aot_condition, rsq_threshold, cv, n_jobs)
