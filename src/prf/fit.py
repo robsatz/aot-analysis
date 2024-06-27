@@ -35,18 +35,18 @@ def select_voxels(data, n_slices, slice_nr, subject):
 
     # flatten to n_voxels x n_timepoints
     data = data.reshape(-1, data.shape[-1])
-    print('Data shape at import:', data.shape)
+    print('Data shape at import:', data.shape, flush=True)
 
     # filter nan values
     brain_mask = ~np.isnan(data).all(axis=1)
-    print(brain_mask.shape)
+    print(brain_mask.shape, flush=True)
     brain_vertices = np.where(brain_mask)[0]
-    print('Number of valid vertices:', brain_vertices.shape)
+    print('Number of valid vertices:', brain_vertices.shape, flush=True)
 
     # get slice
     slice_vertices = np.array_split(brain_vertices, n_slices, axis=0)[slice_nr]
     data = data[slice_vertices]
-    print('Shape of slice:', data.shape)
+    print('Shape of slice:', data.shape, flush=True)
 
     # save vertices
     subject = str(subject).zfill(3)
@@ -56,6 +56,12 @@ def select_voxels(data, n_slices, slice_nr, subject):
         out_path / f'vertices_slice_{str(slice_nr).zfill(4)}.npy', slice_vertices)
 
     return data
+
+
+def split_timepoints(design_matrix, data):
+    n_timepoints = data.shape[-1]
+    split_idx = n_timepoints // 2
+    return design_matrix[:, :, :split_idx], design_matrix[:, :, split_idx:], data[:, :split_idx], data[:, split_idx:]
 
 
 def create_stimulus(design_matrix, params):
@@ -151,7 +157,7 @@ def define_search_space_norm(stim, params):
     return grid_fit_params, iterative_fit_params
 
 
-def gauss_fit(logger, data, stim, n_jobs, params):
+def gauss_fit(logger, stim, data, n_jobs, params):
     grid_fit_params, iterative_fit_params = define_search_space_gauss(
         stim, params)
     gauss_model = model.Iso2DGaussianModel(
@@ -167,7 +173,7 @@ def gauss_fit(logger, data, stim, n_jobs, params):
     logger.iterative_fit(iterative_fit_params)
 
 
-def norm_fit(logger, data, stim, n_jobs, params):
+def norm_fit(logger, stim, data, n_jobs, params):
     grid_fit_params, iterative_fit_params = define_search_space_norm(
         stim, params)
     norm_model = model.Norm_Iso2DGaussianModel(
@@ -190,17 +196,25 @@ def norm_fit(logger, data, stim, n_jobs, params):
     logger.iterative_fit(iterative_fit_params)
 
 
-def fit_prfs(subject, n_slices, slice_nr, n_jobs, params):
+def run_pipeline(subject, n_slices, slice_nr, n_jobs, params):
+    # prepare inputs
     data, design_matrix = load_data(subject)
     data = select_voxels(data, n_slices, slice_nr, subject)
-    stim = create_stimulus(design_matrix, params)
+    design_matrix_train, design_matrix_test, data_train, data_test = split_timepoints(
+        design_matrix, data)
+    print('Shapes after splitting', [arr.shape for arr in (design_matrix_train,
+          design_matrix_test, data_train, data_test)], flush=True)
+    stim_train = create_stimulus(design_matrix_train, params)
+    stim_test = create_stimulus(design_matrix_test, params)
 
+    # fit and evaluate models
     logger = FitLogger(subject, slice_nr)
-    gauss_fit(logger, data, stim, n_jobs, params)
+    gauss_fit(logger, stim_train, data_train, n_jobs, params)
     if params['fit']['filter_positive']:
         logger.filter_positive_prfs()
     # apply DN model using search results from gaussian fit
-    norm_fit(logger, data, stim, n_jobs, params)
+    norm_fit(logger, stim_train, data_train, n_jobs, params)
+    logger.crossvalidate_fit(stim_test, data_test)
 
 
 config = io_utils.load_config()
@@ -231,5 +245,5 @@ if __name__ == '__main__':
     slice_nr = args.slice_nr
     n_jobs = args.n_jobs
 
-    fit_prfs(
+    run_pipeline(
         subject, n_slices, slice_nr, n_jobs, params)

@@ -33,7 +33,7 @@ class FitLogger():
         # setup to write logs to file
         current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         file_handler = logging.FileHandler(
-            self.log_path / f'PRF_{current_time}.log')
+            self.log_path / f'prf_{self.slice_nr}_{current_time}.log')
         file_handler.setLevel(loglevel)
         # setup specific logging format
         formatter = logging.Formatter(
@@ -51,7 +51,7 @@ class FitLogger():
         self.logger.info(
             f"Elapsed time: {timedelta(seconds=elapsed)}")
 
-    def _create_mask(self, params, rsq_threshold, filter_positive):
+    def _create_mask(self, rsq_threshold, filter_positive):
         rsq_mask = self.fitter.gridsearch_params[:, -1] > rsq_threshold
         if filter_positive:
             ampl_mask = self.fitter.gridsearch_params[:, 3] > 0.0
@@ -59,9 +59,6 @@ class FitLogger():
         return rsq_mask
 
     def attach_fitter(self, name, fitter):
-        # maintain previous fitter
-        if self.fitter is not None:
-            self.previous_fitter = copy.deepcopy(self.fitter)
         self.name = name
         self.fitter = fitter
         self.logger.info(f'Fitter attached: {name}')
@@ -74,7 +71,7 @@ class FitLogger():
         self.fitter.grid_fit(**fit_params)
         self._print_time()
         grid_mask = self._create_mask(
-            fit_params, rsq_threshold, filter_positive)
+            rsq_threshold, filter_positive)
         self.save_results('grid', self.fitter.gridsearch_params, grid_mask)
         return grid_mask.sum()
 
@@ -85,6 +82,16 @@ class FitLogger():
         self._print_time()
         self.save_results(
             'iter', self.fitter.iterative_search_params, self.fitter.rsq_mask)
+
+    def crossvalidate_fit(self, stim_test, data_test):
+        print('Crossvalidating...')
+        self._reset_timer()
+        self.fitter.crossvalidate_fit(
+            test_data=data_test,
+            test_stimulus=stim_test)
+        self._print_time()
+        self.save_results(
+            'test', self.fitter.iterative_search_params, self.fitter.rsq_mask)
 
     def filter_positive_prfs(self):
         # amplitude is stored at index 3
@@ -98,7 +105,7 @@ class FitLogger():
         self.logger.info(
             f'---- n_voxels > rsq_threshold: {mask.sum()} / {len(mask)} = {mask.sum()/len(mask)}')
         np.save(
-            self.results_path / f'sub-{self.subject}_{self.slice_nr}_{self.name}_{stage}_fit.npy', search_results)
+            self.results_path / f'sub-{self.subject}_{self.slice_nr}_{self.name}_{stage}.npy', search_results)
 
 
 config = io_utils.load_config()

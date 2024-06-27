@@ -68,7 +68,8 @@ def save_csv(params, out_path):
 def save_params(params_dict, volume_shape, rsq_threshold, subject):
     # specifying file containing affine transform/header metadata
     metadata_path = DIR_DATA / \
-        f'sub-{str(subject).zfill(3)}_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz'
+        f'sub-{str(subject).zfill(3)}'
+    + '_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz'
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / \
         'prf_analysis'
@@ -80,7 +81,7 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
     search_process_by_param = {}
     # order matters: determines nifti volume order
     for model in ('gauss', 'norm'):
-        for search in ('grid', 'iter'):
+        for search in ('grid', 'iter', 'test'):
             params = Parameters(
                 params_dict[model][search], model=model).to_df()
             save_csv(params, out_path /
