@@ -1,11 +1,11 @@
-import numpy as np
+import os
 import yaml
-from pathlib import Path
-from fracridge import FracRidgeRegressor
 import argparse
 import pickle
-import os
 import nibabel as nib
+import numpy as np
+from pathlib import Path
+from fracridge import FracRidgeRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import TransformedTargetRegressor
@@ -71,11 +71,11 @@ def select_voxels(subject, amplitudes, n_slices, slice_nr, r2, rsq_threshold=Non
     flattened_shape = (-1, original_shape[-1])
     amplitudes = np.reshape(amplitudes, flattened_shape)
 
-    # filter by GLMsingle results
-    if rsq_threshold is None:
-        selected_ids = np.where(~np.isnan(amplitudes).all(axis=1))[0]
-    else:
+    # Filter by GLMsingle results
+    if rsq_threshold is not None:
         selected_ids = np.where(r2 > rsq_threshold * 100)[0]
+    else:
+        selected_ids = np.arange(len(r2))  # Select all if no threshold
 
     # get slice
     slice_vertices = np.array_split(selected_ids, n_slices, axis=0)[slice_nr]
@@ -126,16 +126,19 @@ def fit(X, y, cv, n_jobs):
     return gridsearch
 
 
-def save_pipeline(grid_search_obj, subject, segmentation):
+def save_pipeline(grid_search_obj, subject, segmentation, aot_condition, slice_nr):
     subject = str(subject).zfill(3)
-    path = DIR_DERIVATIVES /\
-        f'sub-{subject}/fracridge_{segmentation}'
+    path = DIR_DERIVATIVES \
+        / f'sub-{subject}' \
+        / f'fracridge_{segmentation}_{aot_condition}'
     os.makedirs(path, exist_ok=True)
-    with open(path / 'model.pkl', 'wb') as f:
+
+    base_filename = f'sub-{subject}_slice-{str(slice_nr).zfill(4)}'
+    with open(path / f'{base_filename}_model.pkl', 'wb') as f:
         pickle.dump(grid_search_obj, f)
-    np.save(path / 'betas.npy',
+    np.save(path / f'{base_filename}_betas.npy',
             grid_search_obj.best_estimator_.named_steps['fracridge'].regressor_.coef_)
-    np.save(path / 'alphas.npy',
+    np.save(path / f'{base_filename}_alphas.npy',
             grid_search_obj.best_estimator_.named_steps['fracridge'].regressor_.alpha_)
 
 
@@ -165,7 +168,7 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
             motion_energy, trial_labels, subject, session)
         print('Number of negative motion energy values:',
               (session_design_matrix < 0).sum(), flush=True)
-        # design_matrix[design_matrix < 0] = 0
+        session_design_matrix[session_design_matrix < 0] = 0
 
         print(f"Shapes after transformations - design: {session_design_matrix.shape}, amplitudes: {session_amplitudes.shape}",
               flush=True)
@@ -180,8 +183,11 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
         f'amplitudes: {subject_amplitudes.shape}',
         flush=True)
 
+    subject_amplitudes = np.nan_to_num(
+        subject_amplitudes)  # replace nan by zero
     gridsearch_obj = fit(subject_design_matrix, subject_amplitudes, cv, n_jobs)
-    save_pipeline(gridsearch_obj, subject, segmentation)
+    save_pipeline(gridsearch_obj, subject,
+                  segmentation, aot_condition, slice_nr)
 
 
 core_settings = io_utils.load_config()
@@ -194,9 +200,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-sub", "--subject", type=int, default=1,
                         help="Subject number.")
-    parser.add_argument("--slice_nr", type=int, default=1,
+    parser.add_argument("-slice", "--slice_nr", type=int, default=1,
                         help="Slice number.")
-    parser.add_argument("--n_jobs", type=int, default=1,
+    parser.add_argument("--n_jobs", type=int, default=2,
                         help="Number of jobs")
     args = parser.parse_args()
     subject = args.subject
@@ -209,6 +215,5 @@ if __name__ == '__main__':
     aot_condition = core_settings['fracridge']['aot_condition']
     n_slices = core_settings['fracridge']['n_slices']
 
-
     main(subject, n_slices, slice_nr, segmentation,
-            aot_condition, rsq_threshold, cv, n_jobs)
+         aot_condition, rsq_threshold, cv, n_jobs)

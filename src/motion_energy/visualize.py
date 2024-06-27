@@ -20,12 +20,12 @@ def load_vertices(slice_nr, subject):
         print(f'Slice vertices not found for slice {slice_nr}', flush=True)
 
 
-def load_betas(segmentation, slice_nr, subject):
+def load_betas(segmentation, aot_condition, slice_nr, subject):
     try:
         return np.load(
             DIR_DERIVATIVES
             / f'sub-{str(subject).zfill(3)}'
-            / f'moten_fits'
+            / f'fracridge_{segmentation}_{aot_condition}'
             / f'sub-{str(subject).zfill(3)}_slice_{str(slice_nr).zfill(4)}_betas.npy')
     except FileNotFoundError:
         print(
@@ -39,9 +39,9 @@ def load_filters():
     return pd.DataFrame(pyramid.filters)
 
 
-def get_volume_shape(subject):
+def get_volume_shape(segmentation, subject):
     amplitudes = moten_fit.load_amplitudes(
-        subject, session=1, segmentation='aot')
+        subject, session=1, segmentation=segmentation)
     return amplitudes.shape[:-1]
 
 
@@ -52,7 +52,7 @@ def select_voxel_params(filters, betas):
     return best_params.values
 
 
-def concat_slices(filters, n_voxels, n_slices, subject):
+def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subject):
     # initialize empty array
     n_params = filters.shape[1]
     best_params = np.zeros((n_voxels, n_params))
@@ -62,13 +62,13 @@ def concat_slices(filters, n_voxels, n_slices, subject):
         vertices = load_vertices(slice_nr, subject)
         if vertices is None:
             continue
-        betas = load_betas('aot', slice_nr, subject)
+        betas = load_betas(segmentation, aot_condition, slice_nr, subject)
         best_params[vertices] = select_voxel_params(filters, betas)
 
     return best_params
 
 
-def main(subject, n_slices):
+def main(subject, segmentation, aot_condition, n_slices):
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / \
         'moten_analysis'
@@ -78,9 +78,10 @@ def main(subject, n_slices):
 
     filters = load_filters()
     param_names = filters.columns
-    volume_shape = get_volume_shape(subject)
+    volume_shape = get_volume_shape(segmentation, subject)
     n_voxels = np.prod(volume_shape)
-    params = concat_slices(filters, n_voxels, n_slices, subject)
+    params = concat_slices(filters, segmentation,
+                           aot_condition, n_voxels, n_slices, subject)
     # unflatten to volume shape
     params = params.reshape(volume_shape + (-1,))
 
@@ -105,6 +106,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     subject = args.subject
+    segmentation = config['fracridge']['segmentation']
+    aot_condition = config['fracridge']['aot_condition']
     n_slices = config['fracridge']['n_slices']
 
-    main(subject, n_slices)
+    main(subject, segmentation, aot_condition, n_slices)
