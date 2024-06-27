@@ -74,7 +74,7 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
     os.makedirs(out_path, exist_ok=True)
 
     filename_base = f'sub-{str(subject).zfill(3)}'
-    placeholder_volume = np.zeros(volume_shape)
+    # placeholder_volume = np.zeros(volume_shape)
     search_process_by_param = {}
     # order matters: determines nifti volume order
     for model, stage in [('gauss', 'grid'),
@@ -87,30 +87,30 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
         save_csv(params, out_path /
                  f'{filename_base}_{model}_{stage}_fit.csv')
 
-         # # create r2 mask for thresholded outputs
-         # r2_volume = params['r2'].values.reshape(volume_shape)
-         # r2_mask = r2_volume > rsq_threshold
+        # # create r2 mask for thresholded outputs
+        # r2_volume = params['r2'].values.reshape(volume_shape)
+        # r2_mask = r2_volume > rsq_threshold
 
-         # iterate over params
-         for param in params.columns:
-              full_volume = params[param].values.reshape(volume_shape)
-               if param == 'r2':
-                    # some failing prf fits result in extreme, negative r2 outliers
-                    full_volume[full_volume < 0] = 0
-                    # outputs = [full_volume]
-                # else:
+        # iterate over params
+        for param in params.columns:
+            full_volume = params[param].values.reshape(volume_shape)
+            if param == 'r2':
+                # some failing prf fits result in extreme, negative r2 outliers
+                full_volume[full_volume < 0] = 0
+                # outputs = [full_volume]
+            # else:
 
-                #     outputs = [full_volume]
-                    # save rsq-thresholded version
-                    # thresh_volume = deepcopy(placeholder_volume)
-                    # thresh_volume[r2_mask] = full_volume[r2_mask]
-                    # outputs.append(thresh_volume)
+            #     outputs = [full_volume]
+                # save rsq-thresholded version
+                # thresh_volume = deepcopy(placeholder_volume)
+                # thresh_volume[r2_mask] = full_volume[r2_mask]
+                # outputs.append(thresh_volume)
 
-                outputs = [full_volume]
-                if param not in search_process_by_param:
-                    search_process_by_param[param] = outputs
-                else:
-                    search_process_by_param[param].extend(outputs)
+            outputs = [full_volume]
+            if param not in search_process_by_param:
+                search_process_by_param[param] = outputs
+            else:
+                search_process_by_param[param].extend(outputs)
 
     for param in search_process_by_param.keys():
         print(
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     # retrieve volumetric shape for initialization of arrays
     data, _ = prf_fit.load_data(subject)
     volume_shape = data.shape[:3]
-    n_voxels = volume_shape[0] * volume_shape[1] * volume_shape[2]
+    n_voxels = np.prod(volume_shape)
 
     params_dict = concat_slices(
         n_voxels, n_slices, subject)
