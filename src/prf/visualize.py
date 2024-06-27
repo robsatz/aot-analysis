@@ -17,17 +17,14 @@ def load_vertices(slice_nr, subject):
         print(f'Slice vertices not found for slice {slice_nr}', flush=True)
 
 
-def load_params(model_type, search_type, slice_nr, subject):
+def load_params(model_type, stage, slice_nr, subject):
     try:
         return np.load(
-            DIR_DERIVATIVES / f'sub-{str(subject).zfill(3)}' / 'prf_fits' / f'sub-{str(subject).zfill(3)}_{str(slice_nr).zfill(5)}_{model_type}_{search_type}_fit.npy')
+            DIR_DERIVATIVES / f'sub-{str(subject).zfill(3)}' / 'prf_fits' / f'sub-{str(subject).zfill(3)}_{str(slice_nr).zfill(5)}_{model_type}_{stage}.npy')
     except FileNotFoundError:
         print(
-            f'Params not found for {model_type}_{search_type}_fit, slice {slice_nr}', flush=True)
+            f'Params not found for {model_type}_{stage}_fit, slice {slice_nr}', flush=True)
         return False
-
-    # norm_iter_params = np.load(DIR_DERIVATIVES / 'prf_fits' / f'sub-002_{str(i).zfill(5)}_norm_iter_fit.npy')
-    # norm_iter_fit[vertices] = norm_iter_params
 
 
 def concat_slices(n_voxels, n_slices, subject):
@@ -45,7 +42,8 @@ def concat_slices(n_voxels, n_slices, subject):
         },
         'norm': {
             'grid': deepcopy(norm_params),
-            'iter': deepcopy(norm_params)}}
+            'iter': deepcopy(norm_params),
+            'test': deepcopy(norm_params)}}
 
     # retrieve params
     for slice_nr in range(n_slices):
@@ -53,9 +51,9 @@ def concat_slices(n_voxels, n_slices, subject):
         if vertices is None:
             continue
         for model in params_dict.keys():
-            for search in params_dict[model].keys():
-                params_dict[model][search][vertices] = load_params(
-                    model, search, slice_nr, subject)
+            for stage in params_dict[model].keys():
+                params_dict[model][stage][vertices] = load_params(
+                    model, stage, slice_nr, subject)
 
     return params_dict
 
@@ -68,8 +66,8 @@ def save_csv(params, out_path):
 def save_params(params_dict, volume_shape, rsq_threshold, subject):
     # specifying file containing affine transform/header metadata
     metadata_path = DIR_DATA / \
-        f'sub-{str(subject).zfill(3)}'
-    + '_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz'
+        (f'sub-{str(subject).zfill(3)}'
+         + '_ses_pRF_filtered_psc_averageallruns_psc_func.nii.gz')
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / \
         'prf_analysis'
@@ -80,30 +78,33 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
     placeholder_volume.fill(np.nan)
     search_process_by_param = {}
     # order matters: determines nifti volume order
-    for model in ('gauss', 'norm'):
-        for search in ('grid', 'iter', 'test'):
-            params = Parameters(
-                params_dict[model][search], model=model).to_df()
-            save_csv(params, out_path /
-                     f'{filename_base}_{model}_{search}_fit.csv')
+    for model, stage in [('gauss', 'grid'),
+                         ('gauss', 'iter'),
+                         ('norm', 'grid'),
+                         ('norm', 'iter'),
+                         ('norm', 'test')]:
+        params = Parameters(
+            params_dict[model][stage], model=model).to_df()
+        save_csv(params, out_path /
+                 f'{filename_base}_{model}_{stage}_fit.csv')
 
-            # create r2 mask for thresholded outputs
-            r2_volume = params['r2'].values.reshape(volume_shape)
-            r2_mask = r2_volume > rsq_threshold
+        # create r2 mask for thresholded outputs
+        r2_volume = params['r2'].values.reshape(volume_shape)
+        r2_mask = r2_volume > rsq_threshold
 
-            # iterate over params
-            for param in params.columns:
-                full_volume = params[param].values.reshape(volume_shape)
-                if param != 'r2':
-                    # save rsq-thresholded version
-                    thresh_volume = deepcopy(placeholder_volume)
-                    thresh_volume[r2_mask] = full_volume[r2_mask]
+        # iterate over params
+        for param in params.columns:
+            full_volume = params[param].values.reshape(volume_shape)
+            if param != 'r2':
+                # save rsq-thresholded version
+                thresh_volume = deepcopy(placeholder_volume)
+                thresh_volume[r2_mask] = full_volume[r2_mask]
 
-                outputs = [full_volume, thresh_volume]
-                if param not in search_process_by_param:
-                    search_process_by_param[param] = outputs
-                else:
-                    search_process_by_param[param].extend(outputs)
+            outputs = [full_volume, thresh_volume]
+            if param not in search_process_by_param:
+                search_process_by_param[param] = outputs
+            else:
+                search_process_by_param[param].extend(outputs)
 
     for param in search_process_by_param.keys():
         # save nifti as combined volume (showing change throughout search process)
