@@ -78,6 +78,8 @@ paths:
   data: '/tank/shared/2024/visual/AOT/derivatives/fmripreps/aotfull_preprocs/fullpreproc_forcesyn'
   motion_energy: '/tank/rsr341/projects/aot_temporal/data/motion_energy_features'
   derivatives: '/tank/rsr341/projects/aot_temporal/data/derivatives'
+  freesurfer: '/tank/shared/2023/prfexpect/data/derivatives/freesurfer'
+  anat: '/tank/shared/2023/prfexpect/data/sub-003/ses-1/anat'
   aot_experiment:
     base: '/tank/rsr341/projects/aot_temporal/lib/arrow_of_time_experiment'
     settings: 'aot/data/experiment/settings/main'

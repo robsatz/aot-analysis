@@ -63,14 +63,14 @@ class Parameters():
                     "D": self.params[:, 8],
                     "ratio_B-to-D": self.params[:, 7]/self.params[:, 8],
                     "r2": self.params[:, -1],
-                    "size ratio": self.params[:, 6]/self.params[:, 2],
-                    "suppression index": (self.params[:, 5]*self.params[:, 6]**2)/(self.params[:, 3]*self.params[:, 2]**2),
+                    "size_ratio": self.params[:, 6]/self.params[:, 2],
+                    "suppression_index": (self.params[:, 5]*self.params[:, 6]**2)/(self.params[:, 3]*self.params[:, 2]**2),
                     "ecc": np.sqrt(self.params[:, 0]**2+self.params[:, 1]**2),
                     "polar": np.angle(self.params[:, 0]+self.params[:, 1]*1j)}
 
                 if self.params.shape[-1] > 10:
                     params_dict["hrf_deriv"] = self.params[:, -3]
-                    params_dict["hrf_dsip"] = self.params[:, -2]
+                    params_dict["hrf_disp"] = self.params[:, -2]
 
             elif self.model == "dog":
                 params_dict = {
@@ -82,14 +82,14 @@ class Parameters():
                     "surr_ampl": self.params[:, 5],
                     "surr_size": self.params[:, 6],
                     "r2": self.params[:, -1],
-                    "size ratio": self.params[:, 6]/self.params[:, 2],
-                    "suppression index": (self.params[:, 5]*self.params[:, 6]**2)/(self.params[:, 3]*self.params[:, 2]**2),
+                    "size_ratio": self.params[:, 6]/self.params[:, 2],
+                    "suppression_index": (self.params[:, 5]*self.params[:, 6]**2)/(self.params[:, 3]*self.params[:, 2]**2),
                     "ecc": np.sqrt(self.params[:, 0]**2+self.params[:, 1]**2),
                     "polar": np.angle(self.params[:, 0]+self.params[:, 1]*1j)}
 
                 if self.params.shape[-1] > 8:
                     params_dict["hrf_deriv"] = self.params[:, -3]
-                    params_dict["hrf_dsip"] = self.params[:, -2]
+                    params_dict["hrf_disp"] = self.params[:, -2]
 
             elif self.model == "css":
                 params_dict = {
@@ -108,7 +108,7 @@ class Parameters():
                     params_dict["hrf_disp"] = self.params[:, -2]
 
         else:
-            raise ValueError(f"Model must be one of {
-                             self.allow_models}. Not '{self.model}'")
+            raise ValueError(
+                f"Model must be one of {self.allow_models}. Not '{self.model}'")
 
         return pd.DataFrame(params_dict)

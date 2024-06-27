@@ -74,8 +74,7 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
     os.makedirs(out_path, exist_ok=True)
 
     filename_base = f'sub-{str(subject).zfill(3)}'
-    placeholder_volume = np.empty(volume_shape)
-    placeholder_volume.fill(np.nan)
+    placeholder_volume = np.zeros(volume_shape)
     search_process_by_param = {}
     # order matters: determines nifti volume order
     for model, stage in [('gauss', 'grid'),
@@ -88,25 +87,36 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
         save_csv(params, out_path /
                  f'{filename_base}_{model}_{stage}_fit.csv')
 
-        # create r2 mask for thresholded outputs
-        r2_volume = params['r2'].values.reshape(volume_shape)
-        r2_mask = r2_volume > rsq_threshold
+         # # create r2 mask for thresholded outputs
+         # r2_volume = params['r2'].values.reshape(volume_shape)
+         # r2_mask = r2_volume > rsq_threshold
 
-        # iterate over params
-        for param in params.columns:
-            full_volume = params[param].values.reshape(volume_shape)
-            if param != 'r2':
-                # save rsq-thresholded version
-                thresh_volume = deepcopy(placeholder_volume)
-                thresh_volume[r2_mask] = full_volume[r2_mask]
+         # iterate over params
+         for param in params.columns:
+              full_volume = params[param].values.reshape(volume_shape)
+               if param == 'r2':
+                    # some failing prf fits result in extreme, negative r2 outliers
+                    full_volume[full_volume < 0] = 0
+                    # outputs = [full_volume]
+                # else:
 
-            outputs = [full_volume, thresh_volume]
-            if param not in search_process_by_param:
-                search_process_by_param[param] = outputs
-            else:
-                search_process_by_param[param].extend(outputs)
+                #     outputs = [full_volume]
+                    # save rsq-thresholded version
+                    # thresh_volume = deepcopy(placeholder_volume)
+                    # thresh_volume[r2_mask] = full_volume[r2_mask]
+                    # outputs.append(thresh_volume)
+
+                outputs = [full_volume]
+                if param not in search_process_by_param:
+                    search_process_by_param[param] = outputs
+                else:
+                    search_process_by_param[param].extend(outputs)
 
     for param in search_process_by_param.keys():
+        print(
+            f'Storing nifti for {param}: {len(search_process_by_param[param])} volumes')
+        print('Shape of first volume:',
+              search_process_by_param[param][0].shape)
         # save nifti as combined volume (showing change throughout search process)
         search_process = np.stack(
             search_process_by_param[param], axis=-1)
