@@ -16,7 +16,7 @@ motion_energy:
   vhsize: [160, 240]
   fps: 24
 fracridge:
-  rsq_threshold: .8
+  rsq_threshold: .1
   cv: 5
   segmentation: 'aot'  # segmentation of trials in design matrix ('aot' for arrow of time , 'control' for presentation order)
   aot_condition: 'fw'  # trials to include ('fw' for forward, 'rv' for reverse, null for all trials)
