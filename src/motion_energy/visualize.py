@@ -26,17 +26,20 @@ def load_betas(segmentation, aot_condition, slice_nr, subject):
             DIR_DERIVATIVES
             / f'sub-{str(subject).zfill(3)}'
             / f'fracridge_{segmentation}_{aot_condition}'
-            / f'sub-{str(subject).zfill(3)}_slice_{str(slice_nr).zfill(4)}_betas.npy')
+            / f'sub-{str(subject).zfill(3)}_slice-{str(slice_nr).zfill(4)}_betas.npy')
     except FileNotFoundError:
         print(
-            f'Params not found for {segmentation}, slice {slice_nr}', flush=True)
+            f'Betas not found for {segmentation}, slice {slice_nr}', flush=True)
         return False
 
 
 def load_filters():
     with open(DIR_MOTION_ENERGY / 'pyramid.pkl', "rb") as f:
         pyramid = pickle.load(f)
-    return pd.DataFrame(pyramid.filters)
+    filters = pd.DataFrame(pyramid.filters)
+    filters['ecc'] = np.sqrt(filters['centerh']**2+filters['centerv']**2)
+    filters['polar'] = np.angle(filters['centerh']+filters['centerv']*1j)
+    return filters
 
 
 def get_volume_shape(segmentation, subject):
