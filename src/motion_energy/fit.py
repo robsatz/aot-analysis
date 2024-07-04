@@ -13,6 +13,7 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import r2_score
 
 from src import io_utils
+from src.motion_energy import features as moten_features
 
 
 def load_motion_energy():
@@ -100,7 +101,7 @@ def create_design_matrix(motion_energy, trial_labels, subject, session):
 
     # chronologically insert motion energy features into design matrix
     for trial_idx, trial_label in enumerate(trial_labels):
-        source_video_idx = int(trial_label[:4])-1
+        source_video_idx = moten_features.label2idx(trial_label)
         design_matrix[trial_idx, :] = motion_energy[source_video_idx, :]
 
     subject = str(subject).zfill(3)

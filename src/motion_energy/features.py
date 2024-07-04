@@ -21,6 +21,13 @@ def compute_motion_energy(pyramid, input_filename, output_filename):
     return features
 
 
+def label2idx(label):
+    video_id = int(label[:4])
+    is_reverse = (label[-2:] == 'rv')
+    video_idx = (video_id - 1) * 2 + int(is_reverse)
+    return video_idx
+
+
 def get_video_average(pyramid, video_filename, recompute):
     video_condition, _ = os.path.splitext(video_filename)  # e.g. 0001_fw
     video_features_filename = DIR_MOTION_ENERGY / \
@@ -33,9 +40,7 @@ def get_video_average(pyramid, video_filename, recompute):
             pyramid, video_filename, video_features_filename)
     video_avg = np.mean(video_features, axis=0)
 
-    video_id = int(video_condition[:4])
-    is_reverse = (video_condition[-2:] == 'rv')
-    video_idx = (video_id - 1) * 2 + int(is_reverse)
+    video_idx = label2idx(video_condition)
     return video_idx, video_avg
 
 
