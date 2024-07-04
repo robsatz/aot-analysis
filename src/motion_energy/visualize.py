@@ -20,16 +20,19 @@ def load_vertices(slice_nr, subject):
         print(f'Slice vertices not found for slice {slice_nr}', flush=True)
 
 
-def load_betas(segmentation, aot_condition, slice_nr, subject):
+def load_results(segmentation, aot_condition, slice_nr, subject, results_type):
     try:
-        return np.load(
+        results = np.load(
             DIR_DERIVATIVES
             / f'sub-{str(subject).zfill(3)}'
             / f'fracridge_{segmentation}_{aot_condition}'
-            / f'sub-{str(subject).zfill(3)}_slice-{str(slice_nr).zfill(4)}_betas.npy')
+            / f'sub-{str(subject).zfill(3)}_slice-{str(slice_nr).zfill(4)}_{results_type}.npy')
+        print(
+            f'loading {results_type} for {segmentation}, slice {slice_nr} - shape: {results.shape}', flush=True)
+        return results
     except FileNotFoundError:
         print(
-            f'Betas not found for {segmentation}, slice {slice_nr}', flush=True)
+            f'{results_type} not found for {segmentation}, slice {slice_nr}', flush=True)
         return False
 
 
@@ -50,8 +53,12 @@ def get_volume_shape(segmentation, subject):
 
 def select_voxel_params(filters, betas):
     # for each voxel, choose filter with highest beta value
+    betas = np.nan_to_num(betas)
+
     best_filter_idx = np.nanargmax(betas, axis=0)
     best_params = filters.iloc[best_filter_idx]
+
+    print(best_params.shape)
     return best_params.values
 
 
@@ -59,22 +66,29 @@ def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subj
     # initialize empty array
     n_params = filters.shape[1]
     best_params = np.zeros((n_voxels, n_params))
+    r2 = np.zeros((n_voxels, ))
 
     # retrieve params
     for slice_nr in range(n_slices):
         vertices = load_vertices(slice_nr, subject)
         if vertices is None:
             continue
-        betas = load_betas(segmentation, aot_condition, slice_nr, subject)
+
+        betas = load_results(segmentation, aot_condition,
+                             slice_nr, subject, 'betas')
+        print(best_params.shape, vertices.shape)
         best_params[vertices] = select_voxel_params(filters, betas)
 
-    return best_params
+        r2[vertices] = load_results(
+            segmentation, aot_condition, slice_nr, subject, 'r2')
+
+    return best_params, r2
 
 
 def main(subject, segmentation, aot_condition, n_slices):
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / \
-        'moten_analysis'
+        f'moten_analysis_{segmentation}_{aot_condition}'
     os.makedirs(out_path, exist_ok=True)
 
     filename_base = f'sub-{str(subject).zfill(3)}'
@@ -83,18 +97,31 @@ def main(subject, segmentation, aot_condition, n_slices):
     param_names = filters.columns
     volume_shape = get_volume_shape(segmentation, subject)
     n_voxels = np.prod(volume_shape)
-    params = concat_slices(filters, segmentation,
-                           aot_condition, n_voxels, n_slices, subject)
+    params, r2 = concat_slices(filters, segmentation,
+                               aot_condition, n_voxels, n_slices, subject)
+
     # unflatten to volume shape
     params = params.reshape(volume_shape + (-1,))
+    r2 = r2.reshape(volume_shape)
 
+    # save as nifti
+    metadata_path = DIR_DATA / \
+        'sub-002_ses-01_task-AOT_rec-nordicstc_run-1_space-T1w_part-mag_boldref.nii.gz'
     for param_idx, param_label in enumerate(param_names):
         print(
             f'Storing nifti for param {param_label}', flush=True)
         io_utils.save_nifti(
             params[:, :, :, param_idx],
             out_path / f'{filename_base}_{param_label}.nii.gz',
-            subject)
+            subject,
+            metadata_path=metadata_path)
+
+    print(f'Storing nifti for param {param_label}', flush=True)
+    io_utils.save_nifti(
+        r2,
+        out_path / f'{filename_base}_r2.nii.gz',
+        subject,
+        metadata_path=metadata_path)
 
 
 config = io_utils.load_config()

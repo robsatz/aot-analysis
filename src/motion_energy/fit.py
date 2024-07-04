@@ -5,11 +5,12 @@ import pickle
 import nibabel as nib
 import numpy as np
 from pathlib import Path
-from fracridge import FracRidgeRegressor
+from fracridge import FracRidgeRegressor, FracRidgeRegressorCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import TransformedTargetRegressor
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.metrics import r2_score
 
 from src import io_utils
 
@@ -64,7 +65,6 @@ def select_trials(amplitudes, trial_indices):
 
 
 def select_voxels(subject, amplitudes, n_slices, slice_nr, r2, rsq_threshold=None):
-    r2 = r2.ravel()
     original_shape = amplitudes.shape
 
     # flatten to n_voxels x n_trials
@@ -73,9 +73,10 @@ def select_voxels(subject, amplitudes, n_slices, slice_nr, r2, rsq_threshold=Non
 
     # Filter by GLMsingle results
     if rsq_threshold is not None:
+        r2 = r2.ravel()
         selected_ids = np.where(r2 > rsq_threshold * 100)[0]
     else:
-        selected_ids = np.arange(len(r2))  # Select all if no threshold
+        selected_ids = np.arange(len(amplitudes))  # Select all if no threshold
 
     # get slice
     slice_vertices = np.array_split(selected_ids, n_slices, axis=0)[slice_nr]
@@ -110,23 +111,40 @@ def create_design_matrix(motion_energy, trial_labels, subject, session):
 
 
 def fit(X, y, cv, n_jobs):
-    pipeline = Pipeline([
-        ('scaler', StandardScaler()),  # z-scores motion energy features
-        ('fracridge', TransformedTargetRegressor(
-            transformer=StandardScaler(),  # z-scores neural response amplitudes
-            regressor=FracRidgeRegressor(),
-            check_inverse=False))])
-    fracgrid = np.linspace(0.1, 1, 10)
-    gridsearch = GridSearchCV(
-        pipeline,
-        param_grid={'fracridge__regressor__fracs': fracgrid},
-        cv=cv,
-        n_jobs=n_jobs)
-    gridsearch.fit(X, y)
-    return gridsearch
+    # using non-cv fracridge to z-score features and targets; cv added manually
+    # pipeline = Pipeline([
+    #     ('scaler', StandardScaler()),  # z-scores motion energy features
+    #     ('fracridge', TransformedTargetRegressor(
+    #         transformer=StandardScaler(),  # z-scores neural response amplitudes
+    #         regressor=FracRidgeRegressor(),
+    #         check_inverse=False))])
+    # frac_grid = np.linspace(0.1, 1, 10)
+    # gridsearch = GridSearchCV(
+    #     pipeline,
+    #     param_grid={'fracridge__regressor__fracs': frac_grid},
+    #     cv=cv,
+    #     n_jobs=n_jobs)
+    # gridsearch.fit(X, y)
+    # model = gridsearch.best_estimator_
+
+    frac_grid = np.linspace(0.1, 1, 10)
+    model = FracRidgeRegressorCV(normalize=True, cv=cv)
+    model.fit(X, y, frac_grid=frac_grid)
+    return model
 
 
-def save_pipeline(grid_search_obj, subject, segmentation, aot_condition, slice_nr):
+def evaluate(model, X, y):
+    y_pred = model.predict(X)
+    print(
+        f'evaluating - shape y_pred: {y_pred.shape}, shape y_true: {y.shape}')
+    print(
+        f'- null values y_pred: {np.isnan(y_pred).sum()}, y_true: {np.isnan(y).sum()}')
+    y_pred = np.nan_to_num(y_pred)
+    # multioutput ensures voxel scores are not aggregated
+    return r2_score(y, y_pred, multioutput='raw_values')
+
+
+def save_pipeline(model, r2, subject, segmentation, aot_condition, slice_nr):
     subject = str(subject).zfill(3)
     path = DIR_DERIVATIVES \
         / f'sub-{subject}' \
@@ -135,15 +153,15 @@ def save_pipeline(grid_search_obj, subject, segmentation, aot_condition, slice_n
 
     base_filename = f'sub-{subject}_slice-{str(slice_nr).zfill(4)}'
     with open(path / f'{base_filename}_model.pkl', 'wb') as f:
-        pickle.dump(grid_search_obj, f)
+        pickle.dump(model, f)
     np.save(path / f'{base_filename}_betas.npy',
-            grid_search_obj.best_estimator_.named_steps['fracridge'].regressor_.coef_)
+            model.coef_)
     np.save(path / f'{base_filename}_alphas.npy',
-            grid_search_obj.best_estimator_.named_steps['fracridge'].regressor_.alpha_)
+            model.alpha_)
+    np.save(path / f'{base_filename}_r2.npy', r2)
 
 
-def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold, cv, n_jobs):
-
+def get_data(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold):
     motion_energy = load_motion_energy()
     r2 = load_r2(subject)
 
@@ -168,6 +186,8 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
             motion_energy, trial_labels, subject, session)
         print('Number of negative motion energy values:',
               (session_design_matrix < 0).sum(), flush=True)
+
+        # rectify negative motion energy values - interpretation unclear
         session_design_matrix[session_design_matrix < 0] = 0
 
         print(f"Shapes after transformations - design: {session_design_matrix.shape}, amplitudes: {session_amplitudes.shape}",
@@ -177,16 +197,34 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
 
     subject_amplitudes = np.concatenate(subject_amplitudes, axis=0)
     subject_design_matrix = np.concatenate(subject_design_matrix, axis=0)
+    return subject_design_matrix, subject_amplitudes
+
+
+def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold, cv, test_size, n_jobs):
+
+    design_matrix, amplitudes = get_data(
+        subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold)
 
     print(
-        f'Final shapes - design: {subject_design_matrix.shape}',
-        f'amplitudes: {subject_amplitudes.shape}',
+        f'Final shapes - design: {design_matrix.shape}',
+        f'amplitudes: {amplitudes.shape}',
         flush=True)
 
-    subject_amplitudes = np.nan_to_num(
-        subject_amplitudes)  # replace nan by zero
-    gridsearch_obj = fit(subject_design_matrix, subject_amplitudes, cv, n_jobs)
-    save_pipeline(gridsearch_obj, subject,
+    amplitudes = np.nan_to_num(
+        amplitudes)  # replace nan by zero
+
+    # retain test set to prevent information leakage during hyperparam search
+    dm_train, dm_test, amplitudes_train, amplitudes_test = train_test_split(
+        design_matrix, amplitudes, test_size=test_size, random_state=42)
+
+    target_scaler = StandardScaler()
+    amplitudes_train = target_scaler.fit_transform(amplitudes_train)
+    amplitudes_test = target_scaler.transform(amplitudes_test)
+
+    model = fit(dm_train, amplitudes_train, cv, n_jobs)
+    r2 = evaluate(model, dm_test, amplitudes_test)
+    print(f'CV-R2 values - shape: {r2.shape}; mean: {np.mean(r2)}')
+    save_pipeline(model, r2, subject,
                   segmentation, aot_condition, slice_nr)
 
 
@@ -209,11 +247,12 @@ if __name__ == '__main__':
     slice_nr = args.slice_nr
     n_jobs = args.n_jobs
 
-    rsq_threshold = core_settings['fracridge']['rsq_threshold']
-    cv = core_settings['fracridge']['cv']
     segmentation = core_settings['fracridge']['segmentation']
     aot_condition = core_settings['fracridge']['aot_condition']
     n_slices = core_settings['fracridge']['n_slices']
+    rsq_threshold = core_settings['fracridge']['rsq_threshold']
+    cv = core_settings['fracridge']['cv']
+    test_size = core_settings['fracridge']['test_size']
 
     main(subject, n_slices, slice_nr, segmentation,
-         aot_condition, rsq_threshold, cv, n_jobs)
+         aot_condition, rsq_threshold, cv, test_size, n_jobs)
