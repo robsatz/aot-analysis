@@ -82,8 +82,11 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
                          ('norm', 'grid'),
                          ('norm', 'iter'),
                          ('norm', 'test')]:
+        params = params_dict[model][stage]
+        np.save(
+            str(out_path / f'{filename_base}_{model}_{stage}_fit.npy'), params)
         params = Parameters(
-            params_dict[model][stage], model=model).to_df()
+            params, model=model).to_df()
         save_csv(params, out_path /
                  f'{filename_base}_{model}_{stage}_fit.csv')
 

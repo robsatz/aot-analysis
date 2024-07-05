@@ -60,7 +60,7 @@ def select_voxels(data, n_slices, slice_nr, subject):
 
 def split_timepoints(design_matrix, data):
     n_timepoints = data.shape[-1]
-    split_idx = n_timepoints // 2
+    split_idx = (n_timepoints // 2) + 1
     return design_matrix[:, :, :split_idx], design_matrix[:, :, split_idx:], data[:, :split_idx], data[:, split_idx:]
 
 
