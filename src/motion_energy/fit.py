@@ -66,18 +66,13 @@ def select_trials(amplitudes, trial_indices):
 
 
 def select_voxels(subject, amplitudes, n_slices, slice_nr, r2, rsq_threshold=None):
-    original_shape = amplitudes.shape
-
-    # flatten to n_voxels x n_trials
-    flattened_shape = (-1, original_shape[-1])
-    amplitudes = np.reshape(amplitudes, flattened_shape)
-
     # Filter by GLMsingle results
     if rsq_threshold is not None:
         r2 = r2.ravel()
         selected_ids = np.where(r2 > rsq_threshold * 100)[0]
     else:
-        selected_ids = np.arange(len(amplitudes))  # Select all if no threshold
+        selected_ids = np.where(~(np.isnan(amplitudes).any(axis=1)))[
+            0]
 
     # get slice
     slice_vertices = np.array_split(selected_ids, n_slices, axis=0)[slice_nr]
@@ -112,22 +107,6 @@ def create_design_matrix(motion_energy, trial_labels, subject, session):
 
 
 def fit(X, y, cv, n_jobs):
-    # using non-cv fracridge to z-score features and targets; cv added manually
-    # pipeline = Pipeline([
-    #     ('scaler', StandardScaler()),  # z-scores motion energy features
-    #     ('fracridge', TransformedTargetRegressor(
-    #         transformer=StandardScaler(),  # z-scores neural response amplitudes
-    #         regressor=FracRidgeRegressor(),
-    #         check_inverse=False))])
-    # frac_grid = np.linspace(0.1, 1, 10)
-    # gridsearch = GridSearchCV(
-    #     pipeline,
-    #     param_grid={'fracridge__regressor__fracs': frac_grid},
-    #     cv=cv,
-    #     n_jobs=n_jobs)
-    # gridsearch.fit(X, y)
-    # model = gridsearch.best_estimator_
-
     frac_grid = np.linspace(0.1, 1, 10)
     model = FracRidgeRegressorCV(normalize=True, cv=cv)
     model.fit(X, y, frac_grid=frac_grid)
@@ -169,7 +148,7 @@ def get_data(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_thres
     subject_amplitudes = []
     subject_design_matrix = []
     for session in range(1, 6):
-
+        print(f'Loading data for session {session}')
         trial_indices, trial_labels = create_trial_sequence(
             subject, session, aot_condition)
 
@@ -178,10 +157,12 @@ def get_data(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_thres
         print(f'Shapes before transformations - motion energy: {motion_energy.shape} and amplitudes: {session_amplitudes.shape}',
               flush=True)
 
-        session_amplitudes = select_voxels(
-            subject, session_amplitudes, n_slices, slice_nr, r2, rsq_threshold)
+        # flatten amplitudes to n_voxels x n_trials
+        original_shape = session_amplitudes.shape
+        flattened_shape = (-1, original_shape[-1])
+        session_amplitudes = np.reshape(session_amplitudes, flattened_shape)
+
         session_amplitudes = select_trials(session_amplitudes, trial_indices)
-        session_amplitudes = session_amplitudes.T  # n_trials x n_voxels
 
         session_design_matrix = create_design_matrix(
             motion_energy, trial_labels, subject, session)
@@ -191,13 +172,23 @@ def get_data(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_thres
         # rectify negative motion energy values - interpretation unclear
         session_design_matrix[session_design_matrix < 0] = 0
 
+        print(
+            f'Number of nans - dm: {np.isnan(session_design_matrix).sum()}, amplitudes: {np.isnan(session_amplitudes).sum()}', flush=True)
+        session_amplitudes = np.nan_to_num(
+            session_amplitudes)  # replace nan by zero
+
         print(f"Shapes after transformations - design: {session_design_matrix.shape}, amplitudes: {session_amplitudes.shape}",
               flush=True)
         subject_amplitudes.append(session_amplitudes)
         subject_design_matrix.append(session_design_matrix)
 
-    subject_amplitudes = np.concatenate(subject_amplitudes, axis=0)
+    subject_amplitudes = np.concatenate(subject_amplitudes, axis=1)
     subject_design_matrix = np.concatenate(subject_design_matrix, axis=0)
+
+    subject_amplitudes = select_voxels(
+        subject, subject_amplitudes, n_slices, slice_nr, r2, rsq_threshold)
+    subject_amplitudes = subject_amplitudes.T  # n_trials x n_voxels
+
     return subject_design_matrix, subject_amplitudes
 
 
@@ -207,24 +198,26 @@ def main(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold
         subject, n_slices, slice_nr, segmentation, aot_condition, rsq_threshold)
 
     print(
-        f'Final shapes - design: {design_matrix.shape}',
+        f'Final shapes - dm: {design_matrix.shape}',
         f'amplitudes: {amplitudes.shape}',
         flush=True)
-
-    amplitudes = np.nan_to_num(
-        amplitudes)  # replace nan by zero
 
     # retain test set to prevent information leakage during hyperparam search
     dm_train, dm_test, amplitudes_train, amplitudes_test = train_test_split(
         design_matrix, amplitudes, test_size=test_size, random_state=42)
+    print(
+        f'Number of nans - dm(train, test) amplitudes(train, test): {[np.isnan(arr).sum() for arr in (dm_train, dm_test, amplitudes_train, amplitudes_test)]}')
 
+    # scale both sets using training set stats - features scaled by FracRidgeCV
     target_scaler = StandardScaler()
     amplitudes_train = target_scaler.fit_transform(amplitudes_train)
     amplitudes_test = target_scaler.transform(amplitudes_test)
 
+    # fit and evaluate model
     model = fit(dm_train, amplitudes_train, cv, n_jobs)
     r2 = evaluate(model, dm_test, amplitudes_test)
-    print(f'CV-R2 values - shape: {r2.shape}; mean: {np.mean(r2)}')
+    print(
+        f'CV-R2 values - shape: {r2.shape}; mean: {np.nanmean(r2)}; max: {np.nanmax(r2)}')
     save_pipeline(model, r2, subject,
                   segmentation, aot_condition, slice_nr)
 
@@ -248,12 +241,13 @@ if __name__ == '__main__':
     slice_nr = args.slice_nr
     n_jobs = args.n_jobs
 
-    segmentation = core_settings['fracridge']['segmentation']
-    aot_condition = core_settings['fracridge']['aot_condition']
-    n_slices = core_settings['fracridge']['n_slices']
-    rsq_threshold = core_settings['fracridge']['rsq_threshold']
-    cv = core_settings['fracridge']['cv']
-    test_size = core_settings['fracridge']['test_size']
+    fit_settings = core_settings['motion_energy']['fit']
+    segmentation = fit_settings['segmentation']
+    aot_condition = fit_settings['aot_condition']
+    n_slices = fit_settings['n_slices']
+    rsq_threshold = fit_settings['rsq_threshold']
+    cv = fit_settings['cv']
+    test_size = fit_settings['test_size']
 
     main(subject, n_slices, slice_nr, segmentation,
          aot_condition, rsq_threshold, cv, test_size, n_jobs)

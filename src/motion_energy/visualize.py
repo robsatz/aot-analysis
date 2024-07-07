@@ -73,21 +73,32 @@ def get_volume_shape(segmentation, subject):
     return amplitudes.shape[:-1]
 
 
-def select_voxel_params(filters, betas):
-    # for each voxel, choose filter with highest beta value
-    betas = np.nan_to_num(betas)
+def average_voxel_params(filters, betas):
+    filters = filters.values
 
-    best_filter_idx = np.nanargmax(betas, axis=0)
-    best_params = filters.iloc[best_filter_idx]
+    # select positive weights only
+    selected_betas = np.zeros_like(betas)
 
-    print(best_params.shape)
-    return best_params.values
+    # select top N betas
+    n = 10
+    top_betas = np.argpartition(betas, -n, axis=0)[-n:]
+    selected_betas[top_betas, :] = betas[top_betas, :]
+
+    # convert betas to weights
+    betas_sum = np.sum(betas, axis=0)
+    weights = betas / betas_sum
+
+    # calculate weighted average via matmul
+    fit_params = weights.T @ filters
+
+    print(fit_params.shape, flush=True)
+    return fit_params
 
 
 def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subject):
     # initialize empty array
     n_params = filters.shape[1]
-    best_params = np.zeros((n_voxels, n_params))
+    fit_params = np.zeros((n_voxels, n_params))
     r2 = np.zeros((n_voxels, ))
 
     # retrieve params
@@ -98,16 +109,14 @@ def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subj
 
         betas = load_results(segmentation, aot_condition,
                              slice_nr, subject, 'betas')
-        print(best_params.shape, vertices.shape)
-        best_params[vertices] = select_voxel_params(filters, betas)
-
         r2[vertices] = load_results(
             segmentation, aot_condition, slice_nr, subject, 'r2')
+        fit_params[vertices] = average_voxel_params(filters, betas)
 
-    return best_params, r2
+    return fit_params, r2
 
 
-def main(subject, segmentation, aot_condition, n_slices, screen_size_cm, screen_distance_cm):
+def main(subject, segmentation, aot_condition, n_slices, rsq_threshold, screen_size_cm, screen_distance_cm):
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / \
         f'moten_analysis_{segmentation}_{aot_condition}'
@@ -121,6 +130,10 @@ def main(subject, segmentation, aot_condition, n_slices, screen_size_cm, screen_
     n_voxels = np.prod(volume_shape)
     params, r2 = concat_slices(filters, segmentation,
                                aot_condition, n_voxels, n_slices, subject)
+
+    # filter out low-rsq vertices
+    filter_vertices = np.where(r2 < rsq_threshold)
+    params[filter_vertices] = 0.0
 
     # unflatten to volume shape
     params = params.reshape(volume_shape + (-1,))
@@ -156,13 +169,17 @@ if __name__ == '__main__':
     parser.add_argument("-sub", "--subject", type=int, default=1,
                         help="Subject number.")
     args = parser.parse_args()
-
     subject = args.subject
-    segmentation = config['fracridge']['segmentation']
-    aot_condition = config['fracridge']['aot_condition']
-    n_slices = config['fracridge']['n_slices']
+
+    fit_settings = config['motion_energy']['fit']
+    segmentation = fit_settings['segmentation']
+    aot_condition = fit_settings['aot_condition']
+    n_slices = fit_settings['n_slices']
+
+    rsq_threshold = config['motion_energy']['visualize']['rsq_threshold']
+
     screen_size_cm = config['prf']['fit']['grid']['screen_size_cm']
     screen_distance_cm = config['prf']['fit']['grid']['screen_distance_cm']
 
     main(subject, segmentation, aot_condition,
-         n_slices, screen_size_cm, screen_distance_cm)
+         n_slices, rsq_threshold, screen_size_cm, screen_distance_cm)

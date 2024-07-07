@@ -49,8 +49,8 @@ DIR_STIMULI = Path(core_settings['paths']['stimuli'])
 DIR_BASE = Path('.')
 DIR_MOTION_ENERGY = DIR_BASE / core_settings['paths']['motion_energy']
 DIR_MOTION_ENERGY_VIDEO_FEATURES = DIR_MOTION_ENERGY / 'video_features'
-SIZE = core_settings['motion_energy']['vhsize']
-FPS = core_settings['motion_energy']['fps']
+SIZE = core_settings['motion_energy']['design_matrix']['vhsize']
+FPS = core_settings['motion_energy']['design_matrix']['fps']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
