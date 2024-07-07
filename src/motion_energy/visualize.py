@@ -36,12 +36,34 @@ def load_results(segmentation, aot_condition, slice_nr, subject, results_type):
         return False
 
 
-def load_filters():
+def load_filters(screen_size_cm, screen_distance_cm):
     with open(DIR_MOTION_ENERGY / 'pyramid.pkl', "rb") as f:
         pyramid = pickle.load(f)
+
     filters = pd.DataFrame(pyramid.filters)
-    filters['ecc'] = np.sqrt(filters['centerh']**2+filters['centerv']**2)
-    filters['polar'] = np.angle(filters['centerh']+filters['centerv']*1j)
+
+    # take screen_size_cm as width, calculate pixel size in cm
+    vdim_px, hdim_px, _ = pyramid.definition.stimulus_vht_fov
+    px_size_cm = screen_size_cm / hdim_px
+
+    # pymoten encodes coordinates as distances from top left corner relative to pixel **height**
+    # recode to absolute distances from center in cm
+    centerv_px = vdim_px * filters.loc[:, 'centerv'] - vdim_px/2
+    centerh_px = vdim_px * filters.loc[:, 'centerh'] - hdim_px/2
+
+    centerv_cm = centerv_px * px_size_cm
+    centerh_cm = centerh_px * px_size_cm
+
+    # convert dims to degrees of visual angle
+    centerv_deg = 2.0 * \
+        np.degrees(np.arctan(centerv_cm / (2.0*screen_distance_cm)))
+    centerh_deg = 2.0 * \
+        np.degrees(np.arctan(centerh_cm / (2.0*screen_distance_cm)))
+
+    complex_coords = centerh_deg + centerv_deg * 1j
+    filters['ecc'] = np.abs(complex_coords)
+    filters['polar'] = np.angle(complex_coords)
+
     return filters
 
 
@@ -85,7 +107,7 @@ def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subj
     return best_params, r2
 
 
-def main(subject, segmentation, aot_condition, n_slices):
+def main(subject, segmentation, aot_condition, n_slices, screen_size_cm, screen_distance_cm):
     out_path = DIR_DERIVATIVES / \
         f'sub-{str(subject).zfill(3)}' / \
         f'moten_analysis_{segmentation}_{aot_condition}'
@@ -93,7 +115,7 @@ def main(subject, segmentation, aot_condition, n_slices):
 
     filename_base = f'sub-{str(subject).zfill(3)}'
 
-    filters = load_filters()
+    filters = load_filters(screen_size_cm, screen_distance_cm)
     param_names = filters.columns
     volume_shape = get_volume_shape(segmentation, subject)
     n_voxels = np.prod(volume_shape)
@@ -116,7 +138,7 @@ def main(subject, segmentation, aot_condition, n_slices):
             subject,
             metadata_path=metadata_path)
 
-    print(f'Storing nifti for param {param_label}', flush=True)
+    print(f'Storing nifti for r2', flush=True)
     io_utils.save_nifti(
         r2,
         out_path / f'{filename_base}_r2.nii.gz',
@@ -139,5 +161,8 @@ if __name__ == '__main__':
     segmentation = config['fracridge']['segmentation']
     aot_condition = config['fracridge']['aot_condition']
     n_slices = config['fracridge']['n_slices']
+    screen_size_cm = config['prf']['fit']['grid']['screen_size_cm']
+    screen_distance_cm = config['prf']['fit']['grid']['screen_distance_cm']
 
-    main(subject, segmentation, aot_condition, n_slices)
+    main(subject, segmentation, aot_condition,
+         n_slices, screen_size_cm, screen_distance_cm)
