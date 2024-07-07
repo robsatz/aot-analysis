@@ -131,6 +131,12 @@ def main(subject, segmentation, aot_condition, n_slices, rsq_threshold, screen_s
     params, r2 = concat_slices(filters, segmentation,
                                aot_condition, n_voxels, n_slices, subject)
 
+    # save all params as csv
+    df = pd.DataFrame(params, columns=param_names)
+    df['R2'] = r2
+    df.to_csv(out_path / f'{filename_base}_params.csv')
+    print(f'Saving csv', flush=True)
+
     # filter out low-rsq vertices
     filter_vertices = np.where(r2 < rsq_threshold)
     params[filter_vertices] = 0.0
@@ -139,19 +145,19 @@ def main(subject, segmentation, aot_condition, n_slices, rsq_threshold, screen_s
     params = params.reshape(volume_shape + (-1,))
     r2 = r2.reshape(volume_shape)
 
-    # save as nifti
+    # save niftis
     metadata_path = DIR_DATA / \
         'sub-002_ses-01_task-AOT_rec-nordicstc_run-1_space-T1w_part-mag_boldref.nii.gz'
     for param_idx, param_label in enumerate(param_names):
         print(
-            f'Storing nifti for param {param_label}', flush=True)
+            f'Saving nifti for param {param_label}', flush=True)
         io_utils.save_nifti(
             params[:, :, :, param_idx],
             out_path / f'{filename_base}_{param_label}.nii.gz',
             subject,
             metadata_path=metadata_path)
 
-    print(f'Storing nifti for r2', flush=True)
+    print(f'Saving nifti for r2', flush=True)
     io_utils.save_nifti(
         r2,
         out_path / f'{filename_base}_r2.nii.gz',
