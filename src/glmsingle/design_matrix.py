@@ -38,14 +38,19 @@ def label2idx(tr_label, prior_videos):
     video_id = int(tr_label[:4])
     is_reverse = (tr_label[5:7] == 'rv')
     is_repeat = (tr_label in prior_videos)
+    xor = is_reverse ^ is_repeat
     if not is_repeat:
         prior_videos.append(tr_label)
 
     # -1 for zero-indexing, * 2 for two conditions per video
+    # segment by arrow of time condition
     feature_idx_aot = (video_id - 1) * 2 + int(is_reverse)
-    feature_idx_control = (video_id - 1) * 2 + int(is_repeat)
+    # segment by presentation index
+    feature_idx_pres = (video_id - 1) * 2 + int(is_repeat)
+    # scrambled, control segmentation
+    feature_idx_scram = (video_id - 1) * 2 + int(xor)
 
-    return feature_idx_aot, feature_idx_control, prior_videos
+    return feature_idx_aot, feature_idx_pres, feature_idx_scram, prior_videos
 
 
 def idx2label(feature_idx):
@@ -56,30 +61,33 @@ def idx2label(feature_idx):
 
     condition = feature_idx % 2
     aot_suffix = {0: '_fw', 1: '_rv'}
-    control_suffix = {0: '_1st', 1: '_2nd'}
+    pres_suffix = {0: '_1st', 1: '_2nd'}
 
     label = str(video_id).zfill(4)
     label_aot = label + aot_suffix[condition]
-    label_control = label + control_suffix[condition]
+    label_pres = label + pres_suffix[condition]
 
-    return label_aot, label_control
+    return label_aot, label_pres
 
 
 def create_run_design_matrices(tr_sequence, n_features, prior_videos):
     # initialize design matrices with shape: number of TRs x number of all possible TR labels (unused columns are later pruned)
     design_matrix_aot = np.zeros(
         (len(tr_sequence), n_features), dtype=int)
-    design_matrix_control = np.zeros(
+    design_matrix_pres = np.zeros(
+        (len(tr_sequence), n_features), dtype=int)
+    design_matrix_scram = np.zeros(
         (len(tr_sequence), n_features), dtype=int)
 
     for tr_index, tr_label in enumerate(tr_sequence):
         if tr_label != BLANK:
-            feature_idx_aot, feature_idx_control, prior_videos = label2idx(
+            feature_idx_aot, feature_idx_pres, feature_idx_scram, prior_videos = label2idx(
                 tr_label, prior_videos)
             design_matrix_aot[tr_index][feature_idx_aot] = 1
-            design_matrix_control[tr_index][feature_idx_control] = 1
+            design_matrix_pres[tr_index][feature_idx_pres] = 1
+            design_matrix_scram[tr_index][feature_idx_scram] = 1
 
-    return design_matrix_aot, design_matrix_control, prior_videos
+    return design_matrix_aot, design_matrix_pres, design_matrix_scram, prior_videos
 
 
 def create_session_design_matrices(subject, session, n_features):
@@ -87,7 +95,8 @@ def create_session_design_matrices(subject, session, n_features):
         open(DIR_EXPERIMENT / 'core_exp_settings.yml'), Loader=yaml.FullLoader)
 
     design_matrices_aot = []
-    design_matrices_control = []
+    design_matrices_pres = []
+    design_matrices_scram = []
     prior_videos = []
 
     # get run design matrices
@@ -96,24 +105,29 @@ def create_session_design_matrices(subject, session, n_features):
         run = str(run_idx + 1).zfill(2)
         tr_sequence = get_tr_sequence(subject, session, run)
         # prior_videos keeps track of video repeats
-        design_matrix_aot, design_matrix_control, prior_videos = create_run_design_matrices(
+        design_matrix_aot, design_matrix_pres, design_matrix_scram, prior_videos = create_run_design_matrices(
             tr_sequence, n_features, prior_videos)
         design_matrices_aot.append(design_matrix_aot)
-        design_matrices_control.append(design_matrix_control)
+        design_matrices_pres.append(design_matrix_pres)
+        design_matrices_scram.append(design_matrix_scram)
 
    # get indices of features used in session
-    used_indices_aot = used_indices_control = set()
+    used_indices_aot = used_indices_pres = used_indices_scram = set()
     for run_idx in range(n_runs):
         used_indices_aot.update(
             set(np.where(np.sum(design_matrices_aot[run_idx], axis=0) != 0)[0]))
-        used_indices_control.update(
-            set(np.where(np.sum(design_matrices_control[run_idx], axis=0) != 0)[0]))
+        used_indices_pres.update(
+            set(np.where(np.sum(design_matrices_pres[run_idx], axis=0) != 0)[0]))
+        used_indices_scram.update(
+            set(np.where(np.sum(design_matrices_scram[run_idx], axis=0) != 0)[0]))
 
     # remap indices to labels - assumes alphabetical order (i.e., '0001_fw' < '0001_rv' and '0001_1st' < '0001_2nd')
     mapping_aot = {idx: idx2label(feat_idx)[0]
                    for idx, feat_idx in enumerate(sorted(used_indices_aot))}
-    mapping_control = {idx: idx2label(feat_idx)[1]
-                       for idx, feat_idx in enumerate(sorted(used_indices_control))}
+    mapping_pres = {idx: idx2label(feat_idx)[1]
+                    for idx, feat_idx in enumerate(sorted(used_indices_pres))}
+    mapping_scram = {idx: idx2label(feat_idx)[1]
+                     for idx, feat_idx in enumerate(sorted(used_indices_scram))}
 
     # save as yaml
     subject = subject.zfill(3)
@@ -122,23 +136,29 @@ def create_session_design_matrices(subject, session, n_features):
     os.makedirs(output_path, exist_ok=True)
     with open(output_path / 'feature_mapping_aot.yml', 'w') as f:
         yaml.dump(mapping_aot, f)
-    with open(output_path / 'feature_mapping_control.yml', 'w') as f:
-        yaml.dump(mapping_control, f)
+    with open(output_path / 'feature_mapping_pres.yml', 'w') as f:
+        yaml.dump(mapping_pres, f)
+    with open(output_path / 'feature_mapping_scram.yml', 'w') as f:
+        yaml.dump(mapping_scram, f)
 
     # remove unused features from design matrices
     for run_idx in range(n_runs):
         design_matrices_aot[run_idx] = design_matrices_aot[run_idx][:, list(
             used_indices_aot)]
-        design_matrices_control[run_idx] = design_matrices_control[run_idx][:, list(
-            used_indices_control)]
+        design_matrices_pres[run_idx] = design_matrices_pres[run_idx][:, list(
+            used_indices_pres)]
+        design_matrices_scram[run_idx] = design_matrices_scram[run_idx][:, list(
+            used_indices_scram)]
 
         # save design matrices
         np.save(output_path /
                 f'sub-{subject}_ses-{session}_run-{str(run_idx+1).zfill(2)}_design_matrix_aot.npy', design_matrices_aot[run_idx])
         np.save(output_path /
-                f'sub-{subject}_ses-{session}_run-{str(run_idx+1).zfill(2)}_design_matrix_control.npy', design_matrices_control[run_idx])
+                f'sub-{subject}_ses-{session}_run-{str(run_idx+1).zfill(2)}_design_matrix_pres.npy', design_matrices_pres[run_idx])
+        np.save(output_path /
+                f'sub-{subject}_ses-{session}_run-{str(run_idx+1).zfill(2)}_design_matrix_scram.npy', design_matrices_scram[run_idx])
 
-    return design_matrices_aot, design_matrices_control
+    return design_matrices_aot, design_matrices_pres, design_matrices_scram
 
 
 def create_subject_design_matrices(subject, n_features):

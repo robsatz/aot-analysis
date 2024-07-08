@@ -14,9 +14,10 @@ def run_glmsingle(subject, session, data_params, model_params, fit_params, n_fea
     bold_data = construct_bold_for_one_session(
         subject, session, data_params['datatype'], data_params['nordictype'])
 
-    design_aot, design_control = create_session_design_matrices(
+    design_aot, design_pres, design_scram = create_session_design_matrices(
         subject, session, n_features)
-    designs = {'control': design_control, 'aot': design_aot}
+    # designs = {'pres': design_pres, 'aot': design_aot}
+    designs = {'scram': design_scram}
 
     for label, design in designs.items():
         print('RUNNING GLMSINGLE FOR:', label)
