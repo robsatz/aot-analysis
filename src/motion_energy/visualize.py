@@ -59,10 +59,16 @@ def load_filters(screen_size_cm, screen_distance_cm):
         np.degrees(np.arctan(centerv_cm / (2.0*screen_distance_cm)))
     centerh_deg = 2.0 * \
         np.degrees(np.arctan(centerh_cm / (2.0*screen_distance_cm)))
+    # descriptive stats: nanmin and nanmax
+    print(f'centerh_deg: {np.nanmin(centerh_deg)} - {np.nanmax(centerh_deg)}')
+    print(f'centerv_deg: {np.nanmin(centerv_deg)} - {np.nanmax(centerv_deg)}')
 
-    complex_coords = centerh_deg + centerv_deg * 1j
-    filters['ecc'] = np.abs(complex_coords)
-    filters['polar'] = np.angle(complex_coords)
+    filters['ecc'] = np.sqrt(centerh_deg**2+centerv_deg**2)
+    filters['polar'] = np.angle(centerh_deg+centerv_deg*1j)
+    # descriptive stats: nanmin and nanmax
+    print(f'ecc: {np.nanmin(filters["ecc"])} - {np.nanmax(filters["ecc"])}')
+    print(f'polar: {np.nanmin(filters["polar"])}'
+          + f'- {np.nanmax(filters["polar"])}')
 
     return filters
 
@@ -182,7 +188,7 @@ if __name__ == '__main__':
     aot_condition = fit_settings['aot_condition']
     n_slices = fit_settings['n_slices']
 
-    rsq_threshold = config['motion_energy']['visualize']['rsq_threshold']
+    rsq_threshold = config['motion_energy']['viz']['rsq_threshold']
 
     screen_size_cm = config['prf']['fit']['grid']['screen_size_cm']
     screen_distance_cm = config['prf']['fit']['grid']['screen_distance_cm']
