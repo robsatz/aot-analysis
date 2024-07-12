@@ -8,36 +8,36 @@ from src import io_utils
 
 
 def load_bold(subject):
+    in_dir = DIR_DATA / f'sub-{subject}' / f'ses-01' / 'func'
+    # in_dir = DIR_DATA
     # same header/image used for all outputs
     filename = f'sub-{subject}_ses-01_task-AOT_rec-nordicstc_run-1_space-T1w_part-mag_boldref.nii.gz'
-    bold = nib.load(DIR_DATA / f'sub-{subject}' /
-                    f'ses-01' / 'func' / filename)
+    bold = nib.load(in_dir / filename)
     return filename, bold.header, bold.get_fdata()
 
 
 def load_evals(session_path):
-    results_aot = np.load(session_path / 'GLMsingle_aot' /
-                          'TYPED_FITHRF_GLMDENOISE_RR.npy', allow_pickle=True).item()
-    results_control = np.load(session_path / 'GLMsingle_control' /
-                              'TYPED_FITHRF_GLMDENOISE_RR.npy', allow_pickle=True).item()
-    return results_aot, results_control
+    segmentations = ('aot', 'pres', 'scram')
+    evals = {segmentation:
+             np.load(session_path /
+                     f'GLMsingle_{segmentation}' /
+                     'TYPED_FITHRF_GLMDENOISE_RR.npy',
+                     allow_pickle=True
+                     ).item()
+             for segmentation in segmentations}
+    return evals
 
 
-def compute_diff(results_aot, results_control):
-    aot_r2 = results_aot['R2']
-    control_r2 = results_control['R2']
-    r2diff = (aot_r2 - control_r2)
-
-    return {
-        'R2_aot': aot_r2,
-        'R2_control': control_r2,
-        'R2_diff': r2diff
-    }
+def compute_diffs(evals, exp_segmentations, control_segmentation):
+    r2 = {key: val['R2'] for key, val in evals.items()}
+    for exp in exp_segmentations:
+        r2[f'{exp}_diff'] = (r2[exp] - r2[control_segmentation])
+    return r2
 
 
 def aggregate(results):
     aggregates = {}
-    for measure in ['R2_aot', 'R2_control', 'R2_diff']:
+    for measure in results.keys():
         aggregates[f'{measure}_mean'] = np.mean(results[measure], axis=0)
         aggregates[f'{measure}_median'] = np.median(results[measure], axis=0)
         aggregates[f'{measure}_std'] = np.std(results[measure], axis=0)
@@ -63,10 +63,9 @@ def save_niftis(out_dir, outputs, bold_header, subject, session=None, bold_img=N
 def compute_session_aggregates(subject, session, header):
     session_path = DIR_DERIVATIVES / \
         f'sub-{subject}' / f'ses-{str(session).zfill(2)}'
-    results_aot, results_control = load_evals(
+    evals = load_evals(
         session_path)
-
-    results = compute_diff(results_aot, results_control)
+    results = compute_diffs(evals, ['aot', 'pres'], 'scram')
     save_niftis(session_path, results, header, subject, session=session)
 
     return results
