@@ -162,6 +162,7 @@ def get_data(subject, n_slices, slice_nr, segmentation, aot_condition, rsq_thres
         flattened_shape = (-1, original_shape[-1])
         session_amplitudes = np.reshape(session_amplitudes, flattened_shape)
 
+        # select trials if filtering for forward/backward using aot_condition
         session_amplitudes = select_trials(session_amplitudes, trial_indices)
 
         session_design_matrix = create_design_matrix(

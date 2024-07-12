@@ -4,8 +4,6 @@ import pandas as pd
 from pathlib import Path
 import argparse
 import pickle
-from copy import deepcopy
-
 from src import io_utils
 from src.motion_energy import fit as moten_fit
 
@@ -55,22 +53,35 @@ def load_filters(screen_size_cm, screen_distance_cm):
     centerh_cm = centerh_px * px_size_cm
 
     # convert dims to degrees of visual angle
-    centerv_deg = 2.0 * \
+    filters['centerv'] = 2.0 * \
         np.degrees(np.arctan(centerv_cm / (2.0*screen_distance_cm)))
-    centerh_deg = 2.0 * \
+    filters['centerh'] = 2.0 * \
         np.degrees(np.arctan(centerh_cm / (2.0*screen_distance_cm)))
-    # descriptive stats: nanmin and nanmax
-    print(f'centerh_deg: {np.nanmin(centerh_deg)} - {np.nanmax(centerh_deg)}')
-    print(f'centerv_deg: {np.nanmin(centerv_deg)} - {np.nanmax(centerv_deg)}')
 
-    filters['ecc'] = np.sqrt(centerh_deg**2+centerv_deg**2)
-    filters['polar'] = np.angle(centerh_deg+centerv_deg*1j)
     # descriptive stats: nanmin and nanmax
-    print(f'ecc: {np.nanmin(filters["ecc"])} - {np.nanmax(filters["ecc"])}')
-    print(f'polar: {np.nanmin(filters["polar"])}'
-          + f'- {np.nanmax(filters["polar"])}')
+    print(
+        f'x_deg: {np.nanmin(filters["centerh"])} - {np.nanmax(filters["centerh"])}')
+    print(
+        f'y_deg: {np.nanmin(filters["centerv"])} - {np.nanmax(filters["centerv"])}')
 
     return filters
+
+
+def cart2polar(x_deg, y_deg):
+    # descriptive stats: nanmin and nanmax
+    print(
+        f'x_deg: {np.nanmin(x_deg)} - {np.nanmax(x_deg)}')
+    print(
+        f'y_deg: {np.nanmin(y_deg)} - {np.nanmax(y_deg)}')
+
+    # assumes coordinates in degrees of visual angle
+    ecc = np.sqrt(x_deg**2+y_deg**2)
+    polar = np.angle(x_deg+y_deg*1j)
+    # descriptive stats: nanmin and nanmax
+    print(f'ecc: {np.nanmin(ecc)} - {np.nanmax(ecc)}')
+    print(f'polar: {np.nanmin(polar)}'
+          + f'- {np.nanmax(polar)}')
+    return pd.DataFrame({'ecc': ecc, 'polar': polar})
 
 
 def get_volume_shape(segmentation, subject):
@@ -82,33 +93,49 @@ def get_volume_shape(segmentation, subject):
 def average_voxel_params(filters, betas):
     filters = filters.values
 
-    # select positive weights only
-    selected_betas = np.zeros_like(betas)
+    # option 1: select top N betas
+    # selected_betas = np.zeros_like(betas)
+    # n = 50
+    # top_betas = np.argpartition(betas, -n, axis=0)[-n:]
+    # selected_betas[top_betas, :] = betas[top_betas, :]
 
-    # select top N betas
-    n = 10
-    top_betas = np.argpartition(betas, -n, axis=0)[-n:]
-    selected_betas[top_betas, :] = betas[top_betas, :]
+    # # option 2: select all positive betas
+    # selected_betas = np.where(betas > 0, betas, 0)
+
+    # option 3: select all betas
+    selected_betas = np.nan_to_num(betas)
+
+    # descriptive stats: min and max
+    print(
+        f'selected_betas: {np.min(selected_betas)} - {np.max(selected_betas)}')
 
     # convert betas to weights
-    betas_sum = np.sum(betas, axis=0)
-    weights = betas / betas_sum
+    betas_sum = np.sum(selected_betas, axis=0)
+    weights = selected_betas / betas_sum
+
+    # descriptive stats: min and max
+    print(f'weights: {np.min(weights)} - {np.max(weights)}')
 
     # calculate weighted average via matmul
-    fit_params = weights.T @ filters
+    avg_params = weights.T @ filters
 
-    print(fit_params.shape, flush=True)
-    return fit_params
+    # descriptive stats: nanmin and nanmax
+    print(f'filters: {np.nanmin(filters)} - {np.nanmax(filters)}')
+    print(f'avg_params: {np.nanmin(avg_params)} - {np.nanmax(avg_params)}')
+
+    print(avg_params.shape, flush=True)
+    return avg_params
 
 
 def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subject):
     # initialize empty array
     n_params = filters.shape[1]
-    fit_params = np.zeros((n_voxels, n_params))
+    avg_params = np.zeros((n_voxels, n_params))
     r2 = np.zeros((n_voxels, ))
 
     # retrieve params
     for slice_nr in range(n_slices):
+        print(f'Loading params for slice {slice_nr}', flush=True)
         vertices = load_vertices(slice_nr, subject)
         if vertices is None:
             continue
@@ -117,9 +144,9 @@ def concat_slices(filters, segmentation, aot_condition, n_voxels, n_slices, subj
                              slice_nr, subject, 'betas')
         r2[vertices] = load_results(
             segmentation, aot_condition, slice_nr, subject, 'r2')
-        fit_params[vertices] = average_voxel_params(filters, betas)
-
-    return fit_params, r2
+        avg_params[vertices] = average_voxel_params(filters, betas)
+    print(f'Concatenation complete - R2 max: {np.nanmax(r2)}')
+    return avg_params, r2
 
 
 def main(subject, segmentation, aot_condition, n_slices, rsq_threshold, screen_size_cm, screen_distance_cm):
@@ -139,9 +166,12 @@ def main(subject, segmentation, aot_condition, n_slices, rsq_threshold, screen_s
 
     # save all params as csv
     df = pd.DataFrame(params, columns=param_names)
+    df[['ecc', 'polar']] = cart2polar(df['centerh'], df['centerv'])
     df['R2'] = r2
-    df.to_csv(out_path / f'{filename_base}_params.csv')
-    print(f'Saving csv', flush=True)
+    print('Dataframe R2 max:', df.R2.max())
+    filepath = out_path / f'{filename_base}_params.csv'
+    df.to_csv(filepath)
+    print(f'Saving csv to {filepath}', flush=True)
 
     # filter out low-rsq vertices
     filter_vertices = np.where(r2 < rsq_threshold)
