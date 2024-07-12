@@ -3,16 +3,30 @@ from pathlib import Path
 from glmsingle import GLM_single
 import argparse
 from src.glmsingle.design_matrix import create_session_design_matrices
-from aot.analysis.glmsingle.code_mainexp.design_constrct import construct_bold_for_one_session
 import copy
+import nibabel as nib
 
 from src import io_utils
 
 
 def run_glmsingle(subject, session, data_params, model_params, fit_params, n_features):
 
-    bold_data = construct_bold_for_one_session(
-        subject, session, data_params['datatype'], data_params['nordictype'])
+    in_path = Path(core_settings['paths']['data'])
+    bold_data = []
+    for run in range(1, 11):
+        filepath = in_path / \
+            (f'sub-{subject.zfill(3)}_'
+             + f'ses-{session}_'
+             + f'task-AOT_rec-nordicstc_'
+             + f'run-{run}_space-T1w_desc-preproc_part-mag_bold.nii.gz')
+        # sub-002_ses-01_task-AOT_rec-nordicstc_run-1_space-T1w_desc-preproc_part-mag_bold.nii.gz
+        try:
+            print('Loading data file:', filepath)
+            run_data = nib.load(filepath).get_fdata()
+            bold_data.append(run_data)
+        except FileNotFoundError:
+            print(f'File not found: {filepath}')
+            continue
 
     design_aot, design_pres, design_scram = create_session_design_matrices(
         subject, session, n_features)
@@ -28,7 +42,7 @@ def run_glmsingle(subject, session, data_params, model_params, fit_params, n_fea
         print(model_params, fit_params)
 
         # copy avoids overwriting
-        print(design_aot[0].shape)
+        print(design[0].shape)
         glm = GLM_single(copy.deepcopy(model_params))
         glm.fit(design=design, data=bold_data, stimdur=fit_params['stimdur'], tr=fit_params['tr'], outputdir=str(
             output_dir), figuredir=str(output_dir))
