@@ -13,14 +13,18 @@ glmsingle:
     stimdur: 2.5
     tr: 0.9
 motion_energy:
-  vhsize: [160, 240]
-  fps: 24
-fracridge:
-  rsq_threshold: .1
-  cv: 5
-  segmentation: 'aot'  # segmentation of trials in design matrix ('aot' for arrow of time , 'control' for presentation order)
-  aot_condition: 'fw'  # trials to include ('fw' for forward, 'rv' for reverse, null for all trials)
-  n_slices: 100
+  design_matrix:
+    vhsize: [160, 240]
+    fps: 24
+  fit:
+    rsq_threshold: .1
+    cv: 5
+    test_size: .3
+    segmentation: 'aot'  # segmentation of trials in design matrix (currently only 'aot' for arrow of time)
+    aot_condition: 'fw'  # trials to include ('fw' for forward, 'rv' for reverse, null for all trials)
+    n_slices: 100
+  viz:
+    rsq_threshold: .0  # filter out params for negative rsq fits
 prf:
   design_matrix:
     blank: -1
@@ -41,7 +45,7 @@ prf:
     ftol: 0.00001
     
     grid:
-      screen_size_cm: 40
+      screen_size_cm: 40  # also used as screen width for motion_energy features
       screen_distance_cm: 200
       vf_extent: [-5, 5]
       # vhsize: [160, 240]  # size design matrix - currently not being used
