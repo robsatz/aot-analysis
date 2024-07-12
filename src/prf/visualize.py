@@ -97,17 +97,17 @@ def save_params(params_dict, volume_shape, rsq_threshold, subject):
         # iterate over params
         for param in params.columns:
             full_volume = params[param].values.reshape(volume_shape)
-            if param == 'r2':
-                # some failing prf fits result in extreme, negative r2 outliers
-                full_volume[full_volume < 0] = 0
-                # outputs = [full_volume]
+            # if param == 'r2':
+            # some failing prf fits result in extreme, negative r2 outliers
+            # full_volume[full_volume < 0] = 0
+            # outputs = [full_volume]
             # else:
 
             #     outputs = [full_volume]
-                # save rsq-thresholded version
-                # thresh_volume = deepcopy(placeholder_volume)
-                # thresh_volume[r2_mask] = full_volume[r2_mask]
-                # outputs.append(thresh_volume)
+            # save rsq-thresholded version
+            # thresh_volume = deepcopy(placeholder_volume)
+            # thresh_volume[r2_mask] = full_volume[r2_mask]
+            # outputs.append(thresh_volume)
 
             outputs = [full_volume]
             if param not in search_process_by_param:

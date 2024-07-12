@@ -13,9 +13,6 @@ import os
 from src.prf.logger import FitLogger
 from src import io_utils
 
-from src.prf.logger import FitLogger
-from src import io_utils
-
 
 def load_data(subject):
     data = nib.load(
