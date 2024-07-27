@@ -1,0 +1,23 @@
+name: aot_analysis
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy<2
+  - pandas
+  - h5py
+  - pathlib
+  - nibabel
+  - imageio
+  - matplotlib
+  - pyyaml
+  - scipy
+  - scikit-learn
+  - pip
+  - pip:
+    - git+https://github.com/cvnlab/GLMsingle.git
+    - git+https://github.com/gallantlab/pymoten.git
+    - git+https://github.com/nrdg/fracridge.git
+    - git+https://github.com/VU-Cog-Sci/prfpy.git
+    - -e . # sets up the aot_analysis package as editable install
