@@ -62,12 +62,16 @@ def idx2label(feature_idx):
     condition = feature_idx % 2
     aot_suffix = {0: '_fw', 1: '_rv'}
     pres_suffix = {0: '_1st', 1: '_2nd'}
+    # scrambled features are meaningless (1st forward and 2nd reverse vs 2nd)
+    # -> assign labels based on appearance in design matrix (diagonal vs antidiagonal)
+    scram_suffix = {0: '_diag', 1: '_antidiag'}
 
     label = str(video_id).zfill(4)
     label_aot = label + aot_suffix[condition]
     label_pres = label + pres_suffix[condition]
+    label_scram = label + scram_suffix[condition]
 
-    return label_aot, label_pres
+    return label_aot, label_pres, label_scram
 
 
 def create_run_design_matrices(tr_sequence, n_features, prior_videos):
@@ -126,7 +130,7 @@ def create_session_design_matrices(subject, session, n_features):
                    for idx, feat_idx in enumerate(sorted(used_indices_aot))}
     mapping_pres = {idx: idx2label(feat_idx)[1]
                     for idx, feat_idx in enumerate(sorted(used_indices_pres))}
-    mapping_scram = {idx: idx2label(feat_idx)[1]
+    mapping_scram = {idx: idx2label(feat_idx)[2]
                      for idx, feat_idx in enumerate(sorted(used_indices_scram))}
 
     # save as yaml
