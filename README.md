@@ -2,7 +2,7 @@
 
 Data analysis code for the Arrow of Time project, an initiative to produce a large-scale movie-watching fMRI dataset.
 
-The work in this repo was produced in the scope of my master's thesis project at the Spinoza Centre for Neuroimaging under the supervision of Dr. Tomas Knapen.
+The work in this repo was conducted in the scope of my master's thesis project at the Spinoza Centre for Neuroimaging under the supervision of Dr. Tomas Knapen.
 
 ## Setup
 
@@ -15,8 +15,8 @@ The work in this repo was produced in the scope of my master's thesis project at
 
 ## Structure
 
-The package is structured by model type.
-The three implemented model types are described below.
+The package is structured by modeling framework.
+The three implemented frameworks are described below.
 After fitting, the results are analyzed and visualized in [notebooks](./notebooks).
 
 ### glmsingle
