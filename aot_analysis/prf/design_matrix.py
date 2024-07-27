@@ -3,10 +3,9 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import argparse
-from scipy.ndimage import zoom
 
-import src.prf.utils as utils
-from src import io_utils
+import aot_analysis.prf.utils as utils
+from aot_analysis import io_utils
 
 
 def load_data(subject, run):

@@ -4,10 +4,9 @@ import os
 import pickle
 import argparse
 import numpy as np
-import yaml
 import os
 
-from src import io_utils
+from aot_analysis import io_utils
 
 
 def compute_motion_energy(pyramid, input_filename, output_filename):

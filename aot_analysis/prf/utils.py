@@ -3,7 +3,7 @@ import imageio
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src import io_utils
+from aot_analysis import io_utils
 
 
 def test_alignment(timepoints):

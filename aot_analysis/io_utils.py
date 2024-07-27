@@ -1,9 +1,6 @@
 import yaml
 import nibabel as nib
-import gzip
-import shutil
 from pathlib import Path
-import os
 
 
 def load_config():

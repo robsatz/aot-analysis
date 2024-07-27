@@ -1,12 +1,12 @@
 import os
 import numpy as np
-import pandas as pd
 from pathlib import Path
 import argparse
 from copy import deepcopy
-from src.prf.parameters import Parameters
-from src import io_utils
-from src.prf import fit as prf_fit
+
+from aot_analysis.prf.parameters import Parameters
+from aot_analysis import io_utils
+from aot_analysis.prf import fit as prf_fit
 
 
 def load_vertices(slice_nr, subject):

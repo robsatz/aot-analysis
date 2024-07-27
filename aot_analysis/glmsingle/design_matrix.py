@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 import argparse
 
-from src import io_utils
+from aot_analysis import io_utils
 
 
 def get_tr_sequence(subject, session, run, shift=0):

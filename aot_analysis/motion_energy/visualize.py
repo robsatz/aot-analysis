@@ -4,8 +4,9 @@ import pandas as pd
 from pathlib import Path
 import argparse
 import pickle
-from src import io_utils
-from src.motion_energy import fit as moten_fit
+
+from aot_analysis import io_utils
+from aot_analysis.motion_energy import fit as moten_fit
 
 
 def load_vertices(slice_nr, subject):

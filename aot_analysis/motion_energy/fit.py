@@ -5,15 +5,13 @@ import pickle
 import nibabel as nib
 import numpy as np
 from pathlib import Path
-from fracridge import FracRidgeRegressor, FracRidgeRegressorCV
-from sklearn.pipeline import Pipeline
+from fracridge import FracRidgeRegressorCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.compose import TransformedTargetRegressor
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 
-from src import io_utils
-from src.motion_energy import features as moten_features
+from aot_analysis import io_utils
+from aot_analysis.motion_energy import features as moten_features
 
 
 def load_motion_energy():

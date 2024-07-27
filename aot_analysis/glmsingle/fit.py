@@ -2,11 +2,11 @@ import os
 from pathlib import Path
 from glmsingle import GLM_single
 import argparse
-from src.glmsingle.design_matrix import create_session_design_matrices
+from aot_analysis.glmsingle.design_matrix import create_session_design_matrices
 import copy
 import nibabel as nib
 
-from src import io_utils
+from aot_analysis import io_utils
 
 
 def run_glmsingle(subject, session, data_params, model_params, fit_params, n_features):

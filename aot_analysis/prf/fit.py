@@ -1,6 +1,5 @@
 
 import numpy as np
-import matplotlib.pyplot as pl
 from prfpy import stimulus, model, fit
 from pathlib import Path
 import numpy as np
@@ -10,8 +9,8 @@ import nibabel as nib
 from copy import deepcopy
 import os
 
-from src.prf.logger import FitLogger
-from src import io_utils
+from aot_analysis.prf.logger import FitLogger
+from aot_analysis import io_utils
 
 
 def load_data(subject):
